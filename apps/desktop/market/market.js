@@ -6,6 +6,7 @@
 const STRINGS = {
   zh: {
     title: '插件市场', engine: '引擎', restartApp: '重启客户端',
+    back: '后退', home: '主页',
     hint: '命令：add <包名或 git 地址> / remove <包名> / update <包名> / install / rollback',
     recommended: '推荐插件（点击填入命令）',
     terminalPlaceholder: '输入插件命令，例如 add @linxin666/dsh-ssh',
@@ -13,6 +14,7 @@ const STRINGS = {
   },
   en: {
     title: 'Plugin Marketplace', engine: 'Engine', restartApp: 'Restart Client',
+    back: 'Back', home: 'Home',
     hint: 'Commands: add <package-or-git-url> / remove <name> / update <name> / install / rollback',
     recommended: 'Recommended plugins (click to fill the command)',
     terminalPlaceholder: 'Type a plugin command, e.g. add @linxin666/dsh-ssh',
@@ -21,6 +23,7 @@ const STRINGS = {
 }
 
 let currentLocale = 'zh'
+let homeUrl = 'https://github.com/topics/dsh-plugin'
 const str = () => STRINGS[currentLocale]
 const pluginTitle = plugin => currentLocale === 'zh' && plugin.titleZh ? plugin.titleZh : plugin.title
 
@@ -53,6 +56,8 @@ function applyLocale() {
   document.getElementById('page-title').textContent = s.title
   document.getElementById('engine-label').textContent = s.engine
   document.getElementById('restart-app').textContent = s.restartApp
+  document.getElementById('webview-back').title = s.back
+  document.getElementById('webview-home').textContent = s.home
   inputEl.placeholder = s.terminalPlaceholder
   hintEl.textContent = s.hint
   langSelect.value = currentLocale
@@ -99,6 +104,14 @@ document.getElementById('restart-app').addEventListener('click', () => {
   void window.market.restartApp()
 })
 
+document.getElementById('webview-back').addEventListener('click', () => {
+  webviewEl.goBack()
+})
+
+document.getElementById('webview-home').addEventListener('click', () => {
+  webviewEl.src = homeUrl
+})
+
 langSelect.addEventListener('change', async () => {
   try {
     currentLocale = await window.market.setLocale(langSelect.value)
@@ -112,10 +125,11 @@ async function init() {
   try {
     const state = await window.market.init()
     currentLocale = state.locale === 'en' ? 'en' : 'zh'
+    homeUrl = state.communityPageUrl
     applyLocale()
     document.getElementById('engine-version').textContent = state.engineVersion ?? 'unknown'
     renderChips(state.plugins)
-    webviewEl.src = state.communityPageUrl
+    webviewEl.src = homeUrl
   } catch (error) {
     appendLine(`✗ ${str().failed}${String(error instanceof Error ? error.message : error)}`, 'err')
   }

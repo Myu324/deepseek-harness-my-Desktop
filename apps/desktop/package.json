@@ -23,7 +23,8 @@
     "build": "tsc -b && tsdown",
     "dev": "npm run build && electron .",
     "start": "electron .",
-    "icons": "node scripts/gen-icons.mjs",
+    "icons": "electron scripts/convert-icon.cjs",
+    "icons:placeholder": "node scripts/gen-icons.mjs",
     "pack": "electron-builder --win nsis portable",
     "pack:mac": "electron-builder --mac dmg zip"
   },

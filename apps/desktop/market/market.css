@@ -53,6 +53,15 @@ button:hover { filter: brightness(1.12); }
 
 button.danger { background: transparent; color: #ff8f8f; border: 1px solid rgba(224, 92, 92, 0.45); }
 
+button.nav {
+  background: var(--panel);
+  color: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 3px 9px;
+  font-size: 12px;
+}
+
 select {
   background: var(--panel);
   color: var(--text);

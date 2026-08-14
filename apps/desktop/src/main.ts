@@ -529,7 +529,7 @@ ipcMain.handle('shell:quit', () => {
 // wire boundary and surfaces failures to the page through the invoke rejection.
 ipcMain.handle('market:init', async (): Promise<{ readonly locale: ShellLocale; readonly communityPageUrl: string; readonly engineVersion: string | undefined; readonly plugins: PluginState[] }> => {
   const listing = await (await ensureMarket()).list()
-  return { locale, communityPageUrl: settings?.communityPageUrl ?? 'https://github.com/zhu1090093659/dsh-web-ui', ...listing }
+  return { locale, communityPageUrl: settings?.communityPageUrl ?? 'https://github.com/topics/dsh-plugin', ...listing }
 })
 ipcMain.handle('market:set-locale', async (_event, next: unknown) => {
   if (next !== 'zh' && next !== 'en') throw new Error('locale must be zh or en')

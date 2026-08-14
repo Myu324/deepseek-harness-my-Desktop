@@ -37,7 +37,7 @@ export const DEFAULT_SHELL_SETTINGS: ShellSettings = {
   updateChannel: 'stable',
   registry: 'https://registry.npmjs.org',
   nodeMirror: 'https://npmmirror.com/mirrors/node',
-  communityPageUrl: 'https://github.com/zhu1090093659/dsh-web-ui',
+  communityPageUrl: 'https://github.com/topics/dsh-plugin',
   locale: 'zh',
 }
 

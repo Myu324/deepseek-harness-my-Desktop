@@ -23,7 +23,7 @@ node --import tsx/esm apps/desktop/scripts/engine-store-e2e.mjs <storeRoot>
 
 ## 插件市场
 
-托盘的 **Plugin Marketplace** 打开一个壳自有窗口，用 webview 内嵌社区页面（壳设置的 `communityPageUrl`，默认 dsh-web-ui 仓库主页）——不爬取任何 GitHub 接口——并在底部提供终端。在社区页找到合适的插件后，用命令安装：`add <包名或 git 地址>`（另有 `remove <名称>`、`update <名称>`、`install`、`rollback`）。终端逐行流式显示真实 `dsh plugin --profile web` 的输出，安装完成后点 **重启客户端** 按钮重启应用生效。webview 上方是本地随包附带的 `apps/desktop/plugin-feed.json` 精选快捷命令条（点击即填入命令）。安装走 pnpm 前向器：pnpm 由引擎仓库运行时目录预置（`runtime/pnpm`，用自带 npm 安装）；pnpm 的 `allowBuilds` 占位条目解析为评审集（`cloudflared: true`、`ssh2`/`cpu-features: false`）加 true（用户已批准安装）。真实环境的完整流程可运行：
+托盘的 **Plugin Marketplace** 打开一个壳自有窗口，用 webview 内嵌社区主题页（壳设置的 `communityPageUrl`，默认 `https://github.com/topics/dsh-plugin`）——不爬取任何 GitHub 接口——头部带后退与主页按钮，底部提供终端。在社区页找到合适的插件后，用命令安装：`add <包名或 git 地址>`（另有 `remove <名称>`、`update <名称>`、`install`、`rollback`）。终端逐行流式显示真实 `dsh plugin --profile web` 的输出，安装完成后点 **重启客户端** 按钮重启应用生效。webview 上方是本地随包附带的 `apps/desktop/plugin-feed.json` 精选快捷命令条（点击即填入命令）。安装走 pnpm 前向器：pnpm 由引擎仓库运行时目录预置（`runtime/pnpm`，用自带 npm 安装）；pnpm 的 `allowBuilds` 占位条目解析为评审集（`cloudflared: true`、`ssh2`/`cpu-features: false`）加 true（用户已批准安装）。真实环境的完整流程可运行：
 
 ```sh
 node --import tsx/esm apps/desktop/scripts/plugin-market-e2e.mjs <storeRoot>
@@ -58,7 +58,7 @@ pnpm --filter @deepseek-ai/dsh-desktop run dev   # tsc + tsdown + electron .
 pnpm --filter @deepseek-ai/dsh-desktop run pack  # NSIS installer + portable zip into .artifacts
 ```
 
-Electron 二进制与 NSIS 工具链默认从 GitHub 下载；设置 `ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/` 与 `ELECTRON_BUILDER_BINARIES_MIRROR=https://npmmirror.com/mirrors/electron-builder-binaries/` 可加速。壳把引擎输出记到 `<userData>/logs/engine.log`，壳设置位于 `<userData>/settings.json`。
+Electron 二进制与 NSIS 工具链默认从 GitHub 下载；设置 `ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/` 与 `ELECTRON_BUILDER_BINARIES_MIRROR=https://npmmirror.com/mirrors/electron-builder-binaries/` 可加速。壳把引擎输出记到 `<userData>/logs/engine.log`，壳设置位于 `<userData>/settings.json`。更换品牌图标：`pnpm --filter @deepseek-ai/dsh-desktop run icons -- <source.png>`（Electron 缩放为 1024px 窗口/macOS 图标与 256px ICO；`icons:placeholder` 重新生成像素占位图）。
 
 ## 当前范围
 
