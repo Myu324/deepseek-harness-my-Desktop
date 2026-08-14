@@ -30,6 +30,7 @@ const MESSAGES = {
   'menu.restartEngine': { zh: '重启引擎', en: 'Restart Engine' },
   'menu.launchAtLogin': { zh: '开机自启', en: 'Launch at login' },
   'menu.checkShellUpdates': { zh: '检查壳更新', en: 'Check for Shell Updates' },
+  'menu.installUpdate': { zh: '安装更新并重启', en: 'Install Update and Restart' },
   'menu.checkEngineUpdates': { zh: '检查引擎更新', en: 'Check for Engine Updates' },
   'menu.marketplace': { zh: '插件市场', en: 'Plugin Marketplace' },
   'menu.language': { zh: '语言 / Language', en: 'Language / 语言' },

@@ -87,6 +87,8 @@ let engineLocation: EngineLocation | undefined
 let window: BrowserWindow | undefined
 let tray: Tray | undefined
 let wiredUpdater: ReturnType<typeof wireUpdater> | undefined
+/** A shell update finished downloading and is ready to install on quit. */
+let shellUpdateReady = false
 let settings: ShellSettings | undefined
 let marketWindow: BrowserWindow | undefined
 let marketOperations: MarketOperations | undefined
@@ -210,6 +212,12 @@ function refreshTrayMenu(): void {
       label: t('menu.checkShellUpdates'),
       click: () => { void wiredUpdater?.check() },
     },
+    ...(shellUpdateReady
+      ? [{
+        label: t('menu.installUpdate'),
+        click: () => { wiredUpdater?.installNow() },
+      }]
+      : []),
     {
       label: t('menu.checkEngineUpdates'),
       click: () => { void checkEngineUpdates() },
@@ -606,6 +614,8 @@ async function boot(): Promise<void> {
       onAvailable: (version) => { logLine(`shell update available: ${version}`) },
       onDownloaded: (version) => {
         logLine(`shell update ${version} downloaded; it installs on quit`)
+        shellUpdateReady = true
+        refreshTrayMenu()
         notify(t('notify.updateReady'), t('notify.updateReadyBody', { version }))
       },
       onError: (message) => { logLine(`shell update check failed: ${message}`) },
@@ -630,7 +640,13 @@ if (!app.requestSingleInstanceLock()) {
 } else {
   app.on('second-instance', showWindow)
   app.on('window-all-closed', () => { app.quit() })
-  app.on('before-quit', () => { quitting = true })
+  app.on('before-quit', () => {
+    quitting = true
+    if (shellUpdateReady && wiredUpdater !== undefined) {
+      logLine('installing the downloaded shell update on quit')
+      wiredUpdater.installNow()
+    }
+  })
   app.on('will-quit', () => { engine?.stop() })
   void app.whenReady().then(boot).catch((error: unknown) => { reportProcessError('boot failure', error) })
 }
