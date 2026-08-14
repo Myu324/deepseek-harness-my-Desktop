@@ -18,7 +18,14 @@
       </select>
     </div>
   </header>
+  <div class="toolbar">
+    <input id="search" type="search" placeholder="搜索插件…" />
+  </div>
   <main id="plugins"></main>
+  <section id="detail" hidden>
+    <button id="back" class="link">← 返回列表</button>
+    <div id="detail-content"></div>
+  </section>
   <section id="rollback-section" hidden>
     <button id="rollback" class="danger">回滚上次更改</button>
     <span class="hint" id="rollback-hint"></span>

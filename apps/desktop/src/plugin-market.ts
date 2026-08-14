@@ -18,7 +18,7 @@ import { writeFileAtomic } from '@deepseek-ai/dsh-atomic-write'
 
 /** One curated feed entry. */
 interface MarketPluginEntry {
-  /** The npm spec to install (bare name or name@version). */
+  /** The install spec (npm name, npm name@version, or a git URL). */
   readonly package: string
   /** Display title. */
   readonly title: string
@@ -28,14 +28,16 @@ interface MarketPluginEntry {
   readonly description: string
   /** Display description in Chinese; the page prefers it when the shell runs in zh. */
   readonly descriptionZh?: string
+  /** The entry's author, when the feed names one. */
+  readonly author?: string
   /** The source repository URL (https). */
   readonly source: string
   /** Whether the entry ships in the official feed (false = community-maintained). */
   readonly official: boolean
   /** Whether this entry aggregates a whole plugin family (one-click family install). */
   readonly bundles: boolean
-  /** The engine semver range the plugin was built against. */
-  readonly compatibility: string
+  /** The engine semver range the plugin was built against; absent means unknown. */
+  readonly compatibility?: string
 }
 
 /** The feed document the marketplace fetches. */
@@ -50,7 +52,7 @@ export interface MarketFeed {
 export interface PluginState extends MarketPluginEntry {
   /** Whether the plugin is installed in the profile. */
   readonly installed: boolean
-  /** Whether the engine version satisfies the entry's compatibility range. */
+  /** Whether the engine version satisfies the entry's compatibility range (true when unknown). */
   readonly compatible: boolean
   /** Whether a rollback snapshot exists for the profile. */
   readonly rollbackAvailable: boolean
@@ -128,7 +130,9 @@ const REVIEWED_BUILD_POLICY = `allowBuilds:
  * false` placeholder when it ignores build scripts; those placeholders are
  * resolved to the reviewed decisions, an absent allowBuilds section gets the
  * reviewed policy appended, and an already-resolved file is left untouched.
- * Packages outside the reviewed set stay blocked and fail loud.
+ * Packages outside the reviewed set resolve to `true`: the user already
+ * approved the install in the trust-displaying marketplace, so their build
+ * scripts run — the same consent pnpm's interactive approve-builds asks for.
  * @param profileDir - the profile directory.
  * @returns true when the policy file changed.
  */
@@ -153,10 +157,8 @@ export async function ensureProfileBuildPolicy(profileDir: string): Promise<bool
       if (match !== null) {
         const name = match[2]
         if (name !== undefined) {
-          const decision = REVIEWED_BUILDS[name]
-          if (decision !== undefined) {
-            return `${match[1]}${name}: ${decision ? 'true' : 'false'}`
-          }
+          const decision = REVIEWED_BUILDS[name] ?? true
+          return `${match[1]}${name}: ${decision ? 'true' : 'false'}`
         }
       }
     }
@@ -222,11 +224,13 @@ export function parseMarketFeed(value: unknown): MarketFeed {
     if (!isText(plugin.description)) throw new Error(`${where} must declare a description`)
     if (plugin.titleZh !== undefined && !isText(plugin.titleZh)) throw new Error(`${where} must declare titleZh as text`)
     if (plugin.descriptionZh !== undefined && !isText(plugin.descriptionZh)) throw new Error(`${where} must declare descriptionZh as text`)
+    if (plugin.author !== undefined && !isText(plugin.author)) throw new Error(`${where} must declare author as text`)
     if (!isHttpsUrl(plugin.source)) throw new Error(`${where} must declare an https source URL`)
     if (typeof plugin.official !== 'boolean') throw new Error(`${where} must declare an official flag`)
     if (typeof plugin.bundles !== 'boolean') throw new Error(`${where} must declare a bundles flag`)
-    if (!isText(plugin.compatibility) || semver.validRange(plugin.compatibility) === null) {
-      throw new Error(`${where} must declare a valid compatibility range`)
+    if (plugin.compatibility !== undefined
+      && (!isText(plugin.compatibility) || semver.validRange(plugin.compatibility) === null)) {
+      throw new Error(`${where} must declare a valid compatibility range when present`)
     }
     return {
       package: plugin.package,
@@ -234,13 +238,55 @@ export function parseMarketFeed(value: unknown): MarketFeed {
       ...plugin.titleZh !== undefined && { titleZh: plugin.titleZh },
       description: plugin.description,
       ...plugin.descriptionZh !== undefined && { descriptionZh: plugin.descriptionZh },
+      ...plugin.author !== undefined && { author: plugin.author },
       source: plugin.source,
       official: plugin.official,
       bundles: plugin.bundles,
-      compatibility: plugin.compatibility,
+      ...plugin.compatibility !== undefined && { compatibility: plugin.compatibility },
     }
   })
   return { version: 1, plugins }
+}
+
+/**
+ * Parse and validate the community plugin index the web-ui family maintains
+ * (`id/name/nameEn/author/description/descriptionEn/repo/npm`). Entries
+ * without an npm field install from their repository as a git spec.
+ * @param value - the fetched JSON value.
+ * @returns the mapped feed entries.
+ */
+export function parseCommunityIndex(value: unknown): MarketPluginEntry[] {
+  if (!Array.isArray(value)) throw new Error('community index must be a JSON array')
+  return value.map((entry, index): MarketPluginEntry => {
+    const where = `community index entry ${index}`
+    if (entry === null || typeof entry !== 'object' || Array.isArray(entry)) {
+      throw new Error(`${where} must be an object`)
+    }
+    const item = entry as Record<string, unknown>
+    if (!isHttpsUrl(item.repo)) throw new Error(`${where} must declare an https repo URL`)
+    const nameEn = isText(item.nameEn) ? item.nameEn : undefined
+    const name = isText(item.name) ? item.name : undefined
+    if (nameEn === undefined && name === undefined) throw new Error(`${where} must declare a name`)
+    const title: string = nameEn ?? name ?? ''
+    const titleZh: string = name ?? nameEn ?? ''
+    const description: string = isText(item.descriptionEn)
+      ? item.descriptionEn
+      : isText(item.description) ? item.description : ''
+    const descriptionZh: string = isText(item.description) ? item.description : description
+    const npm = isText(item.npm) ? item.npm : undefined
+    const repo = item.repo
+    return {
+      package: npm ?? `git+${repo}.git`,
+      title,
+      ...titleZh !== title && { titleZh },
+      description,
+      ...descriptionZh !== description && { descriptionZh },
+      ...isText(item.author) && { author: item.author },
+      source: repo,
+      official: false,
+      bundles: false,
+    }
+  })
 }
 
 /** One feed fetch with transient-network retries; deterministic HTTP errors throw immediately. */
@@ -360,8 +406,10 @@ export async function rollbackProfile(
 
 /** The marketplace's read and mutating operations. */
 export interface MarketOperations {
-  /** The feed merged with the live profile and engine facts. */
+  /** The feed (curated + community) merged with the live profile and engine facts. */
   list(): Promise<{ readonly engineVersion: string | undefined; readonly plugins: PluginState[] }>
+  /** The plugin's README, from the npm registry (npm specs) or the source repo (git specs). */
+  readme(spec: string, source: string): Promise<string>
   /** Install one feed entry's spec (records a rollback snapshot first). */
   install(spec: string): Promise<void>
   /** Uninstall one installed plugin by name. */
@@ -372,18 +420,72 @@ export interface MarketOperations {
   rollback(): Promise<void>
 }
 
-/** The market's injected world: profile, engine version, feed, command runner. */
+/** The market's injected world: profile, engine version, feeds, command runner. */
 export interface MarketContext {
   /** The profile directory the plugin forwarder manages. */
   readonly profileDir: string
   /** The running engine version, or undefined when unknown (compatibility unknown). */
   readonly engineVersion: string | undefined
-  /** The feed URL. */
+  /** The curated feed URL. */
   readonly feedUrl: string
-  /** Feed fetcher override (tests). */
+  /** The npm registry the market reads README packuments from. */
+  readonly registry: string
+  /** The community plugin index URL; omitted disables community merging. */
+  readonly communityIndexUrl?: string
+  /** Fetcher override shared by the feed, the index, and README fetches (tests). */
   readonly fetchFeed?: (url: string) => Promise<unknown>
+  /** Optional diagnostic sink for non-fatal community-index failures. */
+  readonly onLog?: (line: string) => void
   /** The `dsh plugin` command runner; returns the exit code (injected by the shell). */
   readonly runPlugin: (args: readonly string[]) => Promise<number>
+}
+
+/** Whether an install spec is an npm name rather than a git spec. */
+function isNpmSpec(spec: string): boolean {
+  return !spec.startsWith('git+') && !spec.startsWith('github:') && !spec.startsWith('https://')
+}
+
+/** The README cap, in characters; longer documents truncate with a note. */
+const README_MAX_CHARS = 200_000
+
+/** The raw README URL for a github.com repo URL, or undefined. */
+function githubReadmeUrl(source: string): string | undefined {
+  let parsed: URL
+  try {
+    parsed = new URL(source)
+  } catch {
+    return undefined
+  }
+  if (parsed.hostname !== 'github.com') return undefined
+  const parts = parsed.pathname.split('/').filter(part => part !== '')
+  const [owner, repo] = parts
+  if (owner === undefined || repo === undefined) return undefined
+  return `https://raw.githubusercontent.com/${owner}/${repo}/HEAD/README.md`
+}
+
+/** Fetch README text for one plugin: npm packument first, repo raw file otherwise. */
+async function fetchReadmeText(
+  spec: string,
+  source: string,
+  registry: string,
+  fetchImpl: (url: string) => Promise<unknown>,
+): Promise<string> {
+  if (isNpmSpec(spec)) {
+    const url = `${registry.replace(/\/+$/, '')}/${packageName(spec).replace('/', '%2f')}`
+    const packument = await fetchImpl(url)
+    if (packument === null || typeof packument !== 'object' || Array.isArray(packument)) {
+      throw new Error(`plugin readme fetch failed: no packument at ${url}`)
+    }
+    const readme = (packument as Record<string, unknown>).readme
+    if (typeof readme === 'string' && readme.trim() !== '') {
+      return readme.length > README_MAX_CHARS ? `${readme.slice(0, README_MAX_CHARS)}\n\n… (truncated)` : readme
+    }
+  }
+  const rawUrl = githubReadmeUrl(source)
+  if (rawUrl === undefined) throw new Error('no README available for this plugin source')
+  const fetched = await fetchImpl(rawUrl)
+  if (typeof fetched !== 'string') throw new Error(`plugin readme fetch failed: no README at ${rawUrl}`)
+  return fetched.length > README_MAX_CHARS ? `${fetched.slice(0, README_MAX_CHARS)}\n\n… (truncated)` : fetched
 }
 
 /**
@@ -392,27 +494,41 @@ export interface MarketContext {
  * @returns the operations.
  */
 export function createMarket(context: MarketContext): MarketOperations {
-  const fetchFeedImpl = context.fetchFeed ?? undefined
+  const fetchImpl = context.fetchFeed ?? fetchWithRetries
   const runChecked = async (args: readonly string[], purpose: string): Promise<void> => {
     const code = await context.runPlugin(args)
     if (code !== 0) throw new Error(`plugin ${purpose} failed with exit code ${code}`)
   }
   return {
     async list() {
-      const feed = await fetchMarketFeed(context.feedUrl, fetchFeedImpl)
+      const feed = await fetchMarketFeed(context.feedUrl, fetchImpl)
+      const entries = [...feed.plugins]
+      if (context.communityIndexUrl !== undefined) {
+        try {
+          const index = parseCommunityIndex(await fetchImpl(context.communityIndexUrl))
+          const known = new Set(feed.plugins.map(entry => entry.package))
+          entries.push(...index.filter(entry => !known.has(entry.package)))
+        } catch (error) {
+          // The curated feed still lists; the community index is an extra.
+          context.onLog?.(`community index fetch failed: ${error instanceof Error ? error.message : String(error)}`)
+        }
+      }
       const profile = readProfileState(context.profileDir)
-      const plugins = feed.plugins.map((entry): PluginState => {
+      const plugins = entries.map((entry): PluginState => {
         const name = packageName(entry.package)
         return {
           ...entry,
           installed: profile.bundles.includes(name) || profile.dependencies.includes(name),
-          compatible: context.engineVersion === undefined
+          compatible: context.engineVersion === undefined || entry.compatibility === undefined
             ? true
             : semver.satisfies(context.engineVersion, entry.compatibility, { includePrerelease: true }),
           rollbackAvailable: hasProfileSnapshot(context.profileDir),
         }
       })
       return { engineVersion: context.engineVersion, plugins }
+    },
+    async readme(spec, source) {
+      return await fetchReadmeText(spec, source, context.registry, fetchImpl)
     },
     async install(spec) {
       await snapshotProfile(context.profileDir)

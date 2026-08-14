@@ -14,6 +14,7 @@ import {
   ensureProfileBuildPolicy,
   fetchMarketFeed,
   hasProfileSnapshot,
+  parseCommunityIndex,
   parseIgnoredBuilds,
   parseMarketFeed,
   readProfileState,
@@ -73,6 +74,7 @@ function harness(): {
     profileDir,
     engineVersion: '0.1.0-rc.6',
     feedUrl: 'https://feeds.example/plugins.json',
+    registry: 'https://registry.example',
     fetchFeed: async () => validFeed(),
     runPlugin: async (args) => {
       calls.push([...args])
@@ -258,7 +260,8 @@ describe('ensureProfileBuildPolicy', () => {
     expect(content).toContain('cloudflared: true')
     expect(content).toContain('ssh2: false')
     expect(content).toContain('cpu-features: false')
-    expect(content).toContain('someone-else: set this to true or false')
+    // Unknown packages resolve to true: the user already approved the install.
+    expect(content).toContain('someone-else: true')
   })
 
   it('creates the file when the profile has none', async () => {
@@ -266,6 +269,109 @@ describe('ensureProfileBuildPolicy', () => {
     mkdirSync(dir, { recursive: true })
     await expect(ensureProfileBuildPolicy(dir)).resolves.toBe(true)
     expect(readFileSync(join(dir, 'pnpm-workspace.yaml'), 'utf8')).toContain('cloudflared: true')
+  })
+})
+
+describe('parseCommunityIndex', () => {
+  it('maps an entry without npm to its git spec', () => {
+    const entries = parseCommunityIndex([{
+      id: 'dsh-tui', name: 'dsh-TUI', nameEn: 'dsh-TUI', author: 'ccch1mneyyy',
+      description: '中文描述。', descriptionEn: 'English description.', repo: 'https://github.com/ccch1mneyyy/dsh-TUI',
+    }])
+    expect(entries).toEqual([{
+      package: 'git+https://github.com/ccch1mneyyy/dsh-TUI.git',
+      title: 'dsh-TUI',
+      description: 'English description.',
+      descriptionZh: '中文描述。',
+      author: 'ccch1mneyyy',
+      source: 'https://github.com/ccch1mneyyy/dsh-TUI',
+      official: false,
+      bundles: false,
+    }])
+  })
+
+  it('prefers the npm spec when present', () => {
+    const entries = parseCommunityIndex([{ id: 'x', name: 'X', repo: 'https://github.com/a/b', npm: '@scope/x' }])
+    expect(entries[0]?.package).toBe('@scope/x')
+  })
+
+  it('rejects a non-array and entries without a repo', () => {
+    expect(() => parseCommunityIndex({})).toThrow(/JSON array/)
+    expect(() => parseCommunityIndex([{ name: 'x' }])).toThrow(/https repo URL/)
+  })
+})
+
+describe('createMarket community merge and readme', () => {
+  it('merges community entries and dedupes by spec', async () => {
+    const { context } = harness()
+    const routes: Record<string, unknown> = {
+      'https://feeds.example/plugins.json': validFeed(),
+      'https://feeds.example/community.json': [
+        { id: 'dup', name: 'Web UI 全家桶', nameEn: 'Web UI 全家桶', repo: 'https://github.com/zhu1090093659/dsh-web-ui', npm: '@linxin666/dsh-web-ui-all' },
+        { id: 'extra', name: 'Data Agent', nameEn: 'Data Agent', author: 'omdsh-dev', repo: 'https://github.com/omdsh-dev/dsh-data-agent' },
+      ],
+    }
+    const market = createMarket({
+      ...context,
+      communityIndexUrl: 'https://feeds.example/community.json',
+      fetchFeed: async url => routes[url],
+    })
+    const state = await market.list()
+    expect(state.plugins.map(plugin => plugin.package)).toEqual([
+      '@linxin666/dsh-web-ui-all',
+      'git+https://github.com/omdsh-dev/dsh-data-agent.git',
+    ])
+  })
+
+  it('tolerates a failing community index', async () => {
+    const { context } = harness()
+    const logs: string[] = []
+    const market = createMarket({
+      ...context,
+      communityIndexUrl: 'https://feeds.example/community.json',
+      fetchFeed: async (url) => {
+        if (url.includes('community')) throw new Error('down')
+        return validFeed()
+      },
+      onLog: (line) => { logs.push(line) },
+    })
+    const state = await market.list()
+    expect(state.plugins).toHaveLength(1)
+    expect(logs.some(line => line.includes('down'))).toBe(true)
+  })
+
+  it('treats an unknown compatibility as compatible', async () => {
+    const { context } = harness()
+    const feed = validFeed() as { plugins: Array<Record<string, unknown>> }
+    const first = feed.plugins[0]
+    if (first === undefined) throw new Error('fixture has no entries')
+    delete first.compatibility
+    const market = createMarket({ ...context, engineVersion: '0.0.1', fetchFeed: async () => feed })
+    const state = await market.list()
+    expect(state.plugins[0]?.compatible).toBe(true)
+  })
+
+  it('fetches npm READMEs from the registry packument', async () => {
+    const { context } = harness()
+    const market = createMarket({
+      ...context,
+      fetchFeed: async url => url.includes('registry.example') ? { readme: '# Hello\n' } : validFeed(),
+    })
+    await expect(market.readme('@linxin666/dsh-web-ui-all', 'https://github.com/zhu1090093659/dsh-web-ui'))
+      .resolves.toContain('# Hello')
+  })
+
+  it('falls back to the repo raw README for git specs', async () => {
+    const { context } = harness()
+    const market = createMarket({
+      ...context,
+      fetchFeed: async (url) => {
+        if (url.includes('raw.githubusercontent.com')) return '# Repo README\n'
+        return validFeed()
+      },
+    })
+    await expect(market.readme('git+https://github.com/omdsh-dev/dsh-data-agent.git', 'https://github.com/omdsh-dev/dsh-data-agent'))
+      .resolves.toContain('# Repo README')
   })
 })
 

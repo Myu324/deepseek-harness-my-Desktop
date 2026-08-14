@@ -23,7 +23,7 @@ node --import tsx/esm apps/desktop/scripts/engine-store-e2e.mjs <storeRoot>
 
 ## 插件市场
 
-托盘的 **Plugin Marketplace** 打开一个壳自有窗口，展示精选 feed（`apps/desktop/plugin-feed.json`，经仓库 raw URL 服务；壳设置的 `pluginFeedUrl` 可指向别处）。每个 feed 条目声明其 npm spec、来源仓库、官方/社区信任级别与构建所针对的引擎 semver 范围，并可带 `titleZh`/`descriptionZh` 中文字段（中文界面优先显示）；页面将其与实时 profile 合并，提供安装（家族聚合包一键装齐）、更新、卸载，以及基于清单快照的回滚。安装走真实的 `dsh plugin --profile web` pnpm 前向器：pnpm 由引擎仓库运行时目录预置（`runtime/pnpm`，用自带 npm 安装）并前置进命令 PATH。pnpm 会拦截未经评审的构建脚本；市场把 profile workspace 里 pnpm 写入的 `allowBuilds` 占位条目解析为评审策略——`cloudflared: true`（SSH 隧道需要的预编译二进制）、`ssh2`/`cpu-features: false`（用户机无法编译的可选原生绑定）——评审集之外的包保持拦截并响亮失败。新插件只需在 feed 加条目并推送，所有已装客户端即可看到，无需重新打包。真实环境的完整流程可运行：
+托盘的 **Plugin Marketplace** 打开一个壳自有窗口，展示精选 feed（`apps/desktop/plugin-feed.json`，经仓库 raw URL 服务；壳设置的 `pluginFeedUrl` 可指向别处）。每个 feed 条目声明其安装 spec、来源仓库、官方/社区信任级别，以及（已知时的）引擎 semver 兼容范围，可带 `titleZh`/`descriptionZh` 中文字段（中文界面优先显示）；无兼容范围的条目显示「兼容性未知」。页面把 feed 与 web-ui 家族的社区插件索引（`communityIndexUrl`；无 npm 字段的条目以 git spec 从其仓库安装）合并展示，提供搜索框，点击卡片进入详情页渲染插件 README——npm 包读 registry packument，git 安装读仓库 raw README。安装（家族聚合包一键装齐）、更新、卸载与清单快照回滚走真实的 `dsh plugin --profile web` pnpm 前向器：pnpm 由引擎仓库运行时目录预置（`runtime/pnpm`，用自带 npm 安装）并前置进命令 PATH。pnpm 会拦截未经评审的构建脚本；市场把 profile workspace 里 pnpm 写入的 `allowBuilds` 占位条目解析——评审集（`cloudflared: true`、`ssh2`/`cpu-features: false`）之外的条目解析为 true，因为用户已在展示信任信息的界面上批准了安装。新插件只需在 feed 加条目并推送（社区插件由索引自动出现），所有已装客户端即可看到，无需重新打包。真实环境的完整流程可运行：
 
 ```sh
 node --import tsx/esm apps/desktop/scripts/plugin-market-e2e.mjs <storeRoot>

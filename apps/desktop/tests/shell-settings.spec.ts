@@ -64,6 +64,7 @@ describe('readShellSettings', () => {
       registry: 'https://registry.npmmirror.com',
       nodeMirror: DEFAULT_SHELL_SETTINGS.nodeMirror,
       pluginFeedUrl: DEFAULT_SHELL_SETTINGS.pluginFeedUrl,
+      communityIndexUrl: DEFAULT_SHELL_SETTINGS.communityIndexUrl,
       locale: 'en',
     })
   })
@@ -77,6 +78,7 @@ describe('readShellSettings', () => {
       registry: 'https://registry.npmmirror.com',
       nodeMirror: 'https://npmmirror.com/mirrors/node',
       pluginFeedUrl: 'https://raw.githubusercontent.com/example/feed.json',
+      communityIndexUrl: 'https://raw.githubusercontent.com/example/community.json',
       locale: 'zh' as const,
     }
     await writeShellSettings(path, settings)

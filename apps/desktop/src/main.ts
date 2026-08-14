@@ -437,6 +437,9 @@ async function ensureMarket(): Promise<MarketOperations> {
     profileDir,
     engineVersion: enginePackageVersion(versionDir),
     feedUrl: current.pluginFeedUrl,
+    registry: current.registry,
+    communityIndexUrl: current.communityIndexUrl,
+    onLog: logLine,
     runPlugin,
   })
   return marketOperations
@@ -484,6 +487,11 @@ function openMarketWindow(): void {
 ipcMain.handle('market:list', async (): Promise<{ readonly locale: ShellLocale; readonly engineVersion: string | undefined; readonly plugins: PluginState[] }> => {
   const listing = await (await ensureMarket()).list()
   return { locale, ...listing }
+})
+ipcMain.handle('market:readme', async (_event, spec: unknown, source: unknown) => {
+  if (typeof spec !== 'string' || spec.trim() === '') throw new Error('readme needs a package spec')
+  if (typeof source !== 'string' || !source.startsWith('https://')) throw new Error('readme needs an https source URL')
+  return await (await ensureMarket()).readme(spec, source)
 })
 ipcMain.handle('market:set-locale', async (_event, next: unknown) => {
   if (next !== 'zh' && next !== 'en') throw new Error('locale must be zh or en')

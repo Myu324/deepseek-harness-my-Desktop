@@ -90,6 +90,44 @@ h2 { font-size: 15px; margin: 0; }
 
 .actions { display: flex; gap: 8px; }
 
+.toolbar { padding: 12px 24px 0; }
+
+.toolbar input {
+  width: 100%;
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 12px;
+  font: inherit;
+}
+
+.toolbar input:focus { outline: 1px solid var(--accent); }
+
+.detail-card { margin-bottom: 12px; }
+
+#readme-body { font-size: 13px; }
+#readme-body h2, #readme-body h3, #readme-body h4, #readme-body h5, #readme-body h6 { margin: 14px 0 6px; font-size: 14px; }
+#readme-body p { margin: 6px 0; }
+#readme-body ul { margin: 6px 0; padding-left: 20px; }
+#readme-body pre {
+  background: #101218;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 10px;
+  overflow-x: auto;
+  font-size: 12px;
+}
+#readme-body code {
+  background: #101218;
+  border-radius: 4px;
+  padding: 1px 5px;
+  font-size: 12px;
+}
+#readme-body pre code { background: none; padding: 0; }
+#readme-body a { color: var(--accent); text-decoration: none; }
+#back { margin-bottom: 10px; padding: 4px 0; }
+
 section {
   margin: 0 24px 16px;
   display: flex;

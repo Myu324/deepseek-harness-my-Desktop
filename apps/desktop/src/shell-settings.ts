@@ -26,6 +26,8 @@ export interface ShellSettings {
   readonly nodeMirror: string
   /** The plugin marketplace feed URL. */
   readonly pluginFeedUrl: string
+  /** The community plugin index URL the marketplace merges in. */
+  readonly communityIndexUrl: string
   /** The shell UI language. */
   readonly locale: ShellLocale
 }
@@ -38,6 +40,7 @@ export const DEFAULT_SHELL_SETTINGS: ShellSettings = {
   registry: 'https://registry.npmjs.org',
   nodeMirror: 'https://npmmirror.com/mirrors/node',
   pluginFeedUrl: 'https://raw.githubusercontent.com/Myu324/deepseek-harness-my-Desktop/master/apps/desktop/plugin-feed.json',
+  communityIndexUrl: 'https://raw.githubusercontent.com/zhu1090093659/dsh-web-ui/main/packages/dsh-web-ui-settings/community.json',
   locale: 'zh',
 }
 
@@ -49,6 +52,7 @@ interface ParsedSettings {
   readonly registry: string | undefined
   readonly nodeMirror: string | undefined
   readonly pluginFeedUrl: string | undefined
+  readonly communityIndexUrl: string | undefined
   readonly locale: ShellLocale | undefined
 }
 
@@ -66,6 +70,7 @@ function parseSettings(content: string): ParsedSettings {
     registry: undefined,
     nodeMirror: undefined,
     pluginFeedUrl: undefined,
+    communityIndexUrl: undefined,
     locale: undefined,
   }
   let document: unknown
@@ -85,6 +90,7 @@ function parseSettings(content: string): ParsedSettings {
     registry: isHttpUrl(record.registry) ? record.registry : undefined,
     nodeMirror: isHttpUrl(record.nodeMirror) ? record.nodeMirror : undefined,
     pluginFeedUrl: isHttpUrl(record.pluginFeedUrl) ? record.pluginFeedUrl : undefined,
+    communityIndexUrl: isHttpUrl(record.communityIndexUrl) ? record.communityIndexUrl : undefined,
     locale: isShellLocale(record.locale) ? record.locale : undefined,
   }
 }
@@ -111,6 +117,7 @@ export async function readShellSettings(filePath: string): Promise<ShellSettings
     registry: parsed.registry ?? DEFAULT_SHELL_SETTINGS.registry,
     nodeMirror: parsed.nodeMirror ?? DEFAULT_SHELL_SETTINGS.nodeMirror,
     pluginFeedUrl: parsed.pluginFeedUrl ?? DEFAULT_SHELL_SETTINGS.pluginFeedUrl,
+    communityIndexUrl: parsed.communityIndexUrl ?? DEFAULT_SHELL_SETTINGS.communityIndexUrl,
     locale: parsed.locale ?? DEFAULT_SHELL_SETTINGS.locale,
   }
 }
