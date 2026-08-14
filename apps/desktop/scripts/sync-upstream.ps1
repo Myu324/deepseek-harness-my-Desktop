@@ -19,8 +19,8 @@
 [CmdletBinding()]
 param()
 
-$ErrorActionPreference = 'Stop'
-$repoRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
+$ErrorActionPreference = 'Continue'
+$repoRoot = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $PSScriptRoot))
 
 function Invoke-Checked {
   param([Parameter(Mandatory = $true)][string]$Display, [Parameter(Mandatory = $true)][scriptblock]$Block)

@@ -27,8 +27,8 @@ param(
   [string]$Notes = 'Desktop shell release.'
 )
 
-$ErrorActionPreference = 'Stop'
-$repoRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
+$ErrorActionPreference = 'Continue'
+$repoRoot = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $PSScriptRoot))
 $desktopDir = Join-Path $repoRoot 'apps/desktop'
 $packageJson = Join-Path $desktopDir 'package.json'
 $artifacts = Join-Path $desktopDir '.artifacts'
