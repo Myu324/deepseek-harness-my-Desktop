@@ -235,6 +235,30 @@ export function parseMarketFeed(value: unknown): MarketFeed {
   return { version: 1, plugins }
 }
 
+/** One feed fetch with transient-network retries; deterministic HTTP errors throw immediately. */
+async function fetchWithRetries(target: string): Promise<unknown> {
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    try {
+      const response = await fetch(target)
+      if (!response.ok) {
+        throw new Error(
+          `plugin feed fetch failed: HTTP ${response.status} from ${target}`
+          + ' — check that the feed file exists at that URL, or point pluginFeedUrl (in the shell settings) at another feed',
+        )
+      }
+      return await response.json()
+    } catch (error) {
+      // A deterministic HTTP failure carries the marker prefix above; only
+      // network-level failures (fetch threw) deserve a retry.
+      const deterministic = error instanceof Error && error.message.startsWith('plugin feed fetch failed: HTTP')
+      if (attempt === 3 || deterministic) throw error
+      await new Promise(resolve => setTimeout(resolve, attempt * 1000))
+    }
+  }
+  // Unreachable: every loop iteration either returns or throws.
+  throw new Error(`plugin feed fetch failed for ${target}`)
+}
+
 /**
  * Fetch and parse the feed at one URL.
  * @param url - the feed URL.
@@ -242,16 +266,7 @@ export function parseMarketFeed(value: unknown): MarketFeed {
  * @returns the validated feed.
  */
 export async function fetchMarketFeed(url: string, fetchFn?: (target: string) => Promise<unknown>): Promise<MarketFeed> {
-  const fetchImpl = fetchFn ?? (async (target: string): Promise<unknown> => {
-    const response = await fetch(target)
-    if (!response.ok) {
-      throw new Error(
-        `plugin feed fetch failed: HTTP ${response.status} from ${target}`
-        + ' — check that the feed file exists at that URL, or point pluginFeedUrl (in the shell settings) at another feed',
-      )
-    }
-    return await response.json()
-  })
+  const fetchImpl = fetchFn ?? fetchWithRetries
   return parseMarketFeed(await fetchImpl(url))
 }
 

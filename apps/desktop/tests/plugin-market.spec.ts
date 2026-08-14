@@ -8,7 +8,7 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node
 import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterAll, describe, expect, it } from 'vitest'
+import { afterAll, describe, expect, it, vi } from 'vitest'
 import {
   createMarket,
   ensureProfileBuildPolicy,
@@ -120,6 +120,30 @@ describe('fetchMarketFeed', () => {
     await expect(fetchMarketFeed('https://feeds.example/x', async () => {
       throw new Error('network down')
     })).rejects.toThrow('network down')
+  })
+
+  it('retries transient network failures before giving up', async () => {
+    let calls = 0
+    vi.stubGlobal('fetch', vi.fn(async () => {
+      calls += 1
+      if (calls < 3) throw new TypeError('fetch failed')
+      return { ok: true, json: async () => validFeed() }
+    }))
+    const feed = await fetchMarketFeed('https://feeds.example/plugins.json')
+    expect(feed.plugins).toHaveLength(1)
+    expect(calls).toBe(3)
+    vi.unstubAllGlobals()
+  })
+
+  it('does not retry deterministic HTTP errors', async () => {
+    let calls = 0
+    vi.stubGlobal('fetch', vi.fn(async () => {
+      calls += 1
+      return { ok: false, status: 404, json: async () => ({}) }
+    }))
+    await expect(fetchMarketFeed('https://feeds.example/plugins.json')).rejects.toThrow(/HTTP 404/)
+    expect(calls).toBe(1)
+    vi.unstubAllGlobals()
   })
 })
 
