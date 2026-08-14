@@ -40,6 +40,7 @@ import {
   type PluginState,
 } from './plugin-market.ts'
 import { readShellSettings, writeShellSettings, type ShellSettings } from './shell-settings.ts'
+import { SHELL_LOCALES, shellT, type ShellMessageKey, type ShellLocale } from './shell-i18n.ts'
 import { wireUpdater } from './shell-updater.ts'
 
 // electron-updater is CommonJS; its module.exports is the default export.
@@ -92,6 +93,14 @@ let marketOperations: MarketOperations | undefined
 let quitting = false
 let restarting = false
 
+/** The shell UI locale, synced from settings at boot and on every save. */
+let locale: ShellLocale = 'zh'
+
+/** Render one shell message in the current locale. */
+function t(key: ShellMessageKey, params: Readonly<Record<string, string>> = {}): string {
+  return shellT(locale, key, params)
+}
+
 /** Human wording for an engine location kind, used in startup diagnostics. */
 function describeKind(kind: EngineKind): string {
   switch (kind) {
@@ -117,6 +126,11 @@ function fatal(title: string, message: string): void {
   app.exit(1)
 }
 
+/** The log-path line every fatal dialog appends. */
+function logsSuffix(): string {
+  return t('dialog.logsAt', { path: join(logDir, 'engine.log') })
+}
+
 /** A system notification when supported; silent otherwise. */
 function notify(title: string, body: string): void {
   if (!Notification.isSupported()) return
@@ -132,12 +146,14 @@ function trayImage(): Electron.NativeImage | undefined {
 /** Persist shell settings and apply the OS-visible parts. */
 async function saveSettings(next: ShellSettings): Promise<void> {
   settings = next
+  locale = next.locale
   await writeShellSettings(settingsPath, next)
   if (app.isPackaged) {
     app.setLoginItemSettings({ openAtLogin: next.openAtLogin })
   } else {
     logLine('openAtLogin is stored but only applies to the OS in a packaged install')
   }
+  refreshTrayMenu()
 }
 
 /** Show the window over the current engine URL, creating it if needed. */
@@ -156,17 +172,19 @@ function showWindow(): void {
 function refreshTrayMenu(): void {
   if (tray === undefined || settings === undefined) return
   const current = settings
-  tray.setToolTip(`DeepSeek Harness — ${engine === undefined ? 'engine stopped' : `engine on ${engine.port}`}`)
+  tray.setToolTip(engine === undefined
+    ? `DeepSeek Harness — ${t('tray.engineStopped')}`
+    : `DeepSeek Harness — ${t('tray.engineOn', { port: String(engine.port) })}`)
   tray.setContextMenu(Menu.buildFromTemplate([
-    { label: 'Open DeepSeek Harness', click: showWindow },
+    { label: t('menu.open'), click: showWindow },
     {
-      label: 'Restart Engine',
+      label: t('menu.restartEngine'),
       enabled: engine !== undefined && !restarting,
       click: () => { void restartEngine() },
     },
     { type: 'separator' },
     {
-      label: 'Launch at login',
+      label: t('menu.launchAtLogin'),
       type: 'checkbox',
       checked: current.openAtLogin,
       click: (item) => {
@@ -176,20 +194,33 @@ function refreshTrayMenu(): void {
       },
     },
     {
-      label: 'Check for Shell Updates',
+      label: t('menu.language'),
+      submenu: SHELL_LOCALES.map(option => ({
+        label: option === 'zh' ? '中文' : 'English',
+        type: 'radio' as const,
+        checked: current.locale === option,
+        click: () => {
+          void saveSettings({ ...current, locale: option }).catch((error: unknown) => {
+            logLine(`saving settings failed: ${describeError(error)}`)
+          })
+        },
+      })),
+    },
+    {
+      label: t('menu.checkShellUpdates'),
       click: () => { void wiredUpdater?.check() },
     },
     {
-      label: 'Check for Engine Updates',
+      label: t('menu.checkEngineUpdates'),
       click: () => { void checkEngineUpdates() },
     },
     {
-      label: 'Plugin Marketplace',
+      label: t('menu.marketplace'),
       click: openMarketWindow,
     },
     { type: 'separator' },
     {
-      label: 'Quit',
+      label: t('menu.quit'),
       click: () => {
         quitting = true
         app.quit()
@@ -273,7 +304,7 @@ function showPreparingWindow(): void {
 function handleEngineExit(exit: EngineExit): void {
   logLine(`engine exited with code ${String(exit.code)}`)
   if (quitting) return
-  fatal('DeepSeek Harness', `The dsh engine exited unexpectedly (code ${String(exit.code)}).\n\nLogs: ${join(logDir, 'engine.log')}`)
+  fatal('DeepSeek Harness', `${t('dialog.engineUnexpectedExit', { code: String(exit.code) })}\n\n${logsSuffix()}`)
 }
 
 /** Stop the current engine and start a fresh one, reloading the window. */
@@ -292,9 +323,9 @@ async function restartEngine(): Promise<void> {
     logLine(`engine restarted at ${engine.url}`)
     void engine.exited.then(handleEngineExit)
     if (window !== undefined) await window.loadURL(engine.url)
-    notify('DeepSeek Harness', 'Engine restarted.')
+    notify('DeepSeek Harness', t('notify.engineRestartedBody'))
   } catch (error) {
-    fatal('DeepSeek Harness', `The dsh engine failed to restart.\n\n${error instanceof Error ? error.message : String(error)}\n\nLogs: ${join(logDir, 'engine.log')}`)
+    fatal('DeepSeek Harness', `${t('dialog.restartFailed')}\n\n${error instanceof Error ? error.message : String(error)}\n\n${logsSuffix()}`)
   } finally {
     restarting = false
     refreshTrayMenu()
@@ -336,9 +367,9 @@ async function checkEngineUpdates(): Promise<void> {
     const result = await provisionEngineStore()
     if (result.outcome === 'updated') {
       logLine(`engine updated from ${String(result.from)} to ${result.to}; Restart Engine applies it`)
-      notify('Engine update ready', `DeepSeek Harness engine ${result.to} installed — restart the engine to apply.`)
+      notify(t('notify.engineUpdateReady'), t('notify.engineUpdateReadyBody', { version: result.to }))
     } else if (result.outcome === 'unhealthy') {
-      notify('Engine update failed', result.reason)
+      notify(t('notify.engineUpdateFailed'), result.reason)
     }
   } catch (error) {
     logLine(`engine update check failed: ${error instanceof Error ? error.message : String(error)}`)
@@ -450,7 +481,16 @@ function openMarketWindow(): void {
 
 // The marketplace IPC surface: every handler validates its argument at the
 // wire boundary and surfaces failures to the page through the invoke rejection.
-ipcMain.handle('market:list', async (): Promise<{ readonly engineVersion: string | undefined; readonly plugins: PluginState[] }> => (await ensureMarket()).list())
+ipcMain.handle('market:list', async (): Promise<{ readonly locale: ShellLocale; readonly engineVersion: string | undefined; readonly plugins: PluginState[] }> => {
+  const listing = await (await ensureMarket()).list()
+  return { locale, ...listing }
+})
+ipcMain.handle('market:set-locale', async (_event, next: unknown) => {
+  if (next !== 'zh' && next !== 'en') throw new Error('locale must be zh or en')
+  if (settings === undefined) throw new Error('settings are not loaded yet')
+  await saveSettings({ ...settings, locale: next })
+  return locale
+})
 ipcMain.handle('market:install', async (_event, spec: unknown) => {
   if (typeof spec !== 'string' || spec.trim() === '') throw new Error('install needs a package spec')
   await (await ensureMarket()).install(spec)
@@ -480,6 +520,7 @@ async function boot(): Promise<void> {
     // Logging is best-effort; continue booting with console echo only.
   }
   settings = await readShellSettings(settingsPath)
+  locale = settings.locale
   try {
     mkdirSync(userDataDir, { recursive: true })
   } catch {
@@ -503,7 +544,7 @@ async function boot(): Promise<void> {
     } catch (error) {
       fatal(
         'DeepSeek Harness',
-        `Engine provisioning failed.\n\n${error instanceof Error ? error.message : String(error)}\n\nLogs: ${join(logDir, 'engine.log')}`,
+        `${t('dialog.provisioningFailed')}\n\n${error instanceof Error ? error.message : String(error)}\n\n${logsSuffix()}`,
       )
       return
     }
@@ -519,19 +560,19 @@ async function boot(): Promise<void> {
     if (fallback === undefined) {
       fatal(
         'DeepSeek Harness',
-        `The dsh engine failed to start.\n\n${error instanceof Error ? error.message : String(error)}\n\nLogs: ${join(logDir, 'engine.log')}`,
+        `${t('dialog.engineStartFailed')}\n\n${error instanceof Error ? error.message : String(error)}\n\n${logsSuffix()}`,
       )
       return
     }
     logLine(`engine ${String(fallback.current)} failed to start; falling back to last-good ${fallback.version}`)
-    notify('DeepSeek Harness', `Engine ${String(fallback.current)} failed to start — using last-good ${fallback.version}.`)
+    notify(t('notify.engineFallback'), t('notify.engineFallbackBody', { current: String(fallback.current), version: fallback.version }))
     try {
       engine = await startEngine({ location: fallback.location, onLine: logLine })
     } catch (fallbackError) {
       fatal(
         'DeepSeek Harness',
-        'The dsh engine failed to start, and the last-good fallback also failed.\n\n'
-        + `${fallbackError instanceof Error ? fallbackError.message : String(fallbackError)}\n\nLogs: ${join(logDir, 'engine.log')}`,
+        `${t('dialog.engineFallbackFailed')}\n\n`
+        + `${fallbackError instanceof Error ? fallbackError.message : String(fallbackError)}\n\n${logsSuffix()}`,
       )
       return
     }
@@ -545,7 +586,7 @@ async function boot(): Promise<void> {
       onAvailable: (version) => { logLine(`shell update available: ${version}`) },
       onDownloaded: (version) => {
         logLine(`shell update ${version} downloaded; it installs on quit`)
-        notify('Update ready', `DeepSeek Harness ${version} downloaded — restart the app to install.`)
+        notify(t('notify.updateReady'), t('notify.updateReadyBody', { version }))
       },
       onError: (message) => { logLine(`shell update check failed: ${message}`) },
     }, settings.updateChannel)

@@ -22,8 +22,12 @@ interface MarketPluginEntry {
   readonly package: string
   /** Display title. */
   readonly title: string
+  /** Display title in Chinese; the page prefers it when the shell runs in zh. */
+  readonly titleZh?: string
   /** Display description. */
   readonly description: string
+  /** Display description in Chinese; the page prefers it when the shell runs in zh. */
+  readonly descriptionZh?: string
   /** The source repository URL (https). */
   readonly source: string
   /** Whether the entry ships in the official feed (false = community-maintained). */
@@ -216,6 +220,8 @@ export function parseMarketFeed(value: unknown): MarketFeed {
     if (!isText(plugin.package)) throw new Error(`${where} must declare a package spec`)
     if (!isText(plugin.title)) throw new Error(`${where} must declare a title`)
     if (!isText(plugin.description)) throw new Error(`${where} must declare a description`)
+    if (plugin.titleZh !== undefined && !isText(plugin.titleZh)) throw new Error(`${where} must declare titleZh as text`)
+    if (plugin.descriptionZh !== undefined && !isText(plugin.descriptionZh)) throw new Error(`${where} must declare descriptionZh as text`)
     if (!isHttpsUrl(plugin.source)) throw new Error(`${where} must declare an https source URL`)
     if (typeof plugin.official !== 'boolean') throw new Error(`${where} must declare an official flag`)
     if (typeof plugin.bundles !== 'boolean') throw new Error(`${where} must declare a bundles flag`)
@@ -225,7 +231,9 @@ export function parseMarketFeed(value: unknown): MarketFeed {
     return {
       package: plugin.package,
       title: plugin.title,
+      ...plugin.titleZh !== undefined && { titleZh: plugin.titleZh },
       description: plugin.description,
+      ...plugin.descriptionZh !== undefined && { descriptionZh: plugin.descriptionZh },
       source: plugin.source,
       official: plugin.official,
       bundles: plugin.bundles,

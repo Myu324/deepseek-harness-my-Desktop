@@ -1,23 +1,27 @@
 <!doctype html>
-<html lang="en">
+<html lang="zh">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Plugin Marketplace — DeepSeek Harness</title>
+  <title>插件市场 — DeepSeek Harness</title>
   <link rel="stylesheet" href="market.css" />
 </head>
 <body>
   <header>
-    <h1>Plugin Marketplace</h1>
+    <h1 id="page-title">插件市场</h1>
     <div class="subtitle">
-      Engine <code id="engine-version">…</code> ·
-      <button id="refresh" class="link">Refresh</button>
+      <span id="engine-label">引擎</span> <code id="engine-version">…</code> ·
+      <button id="refresh" class="link">刷新</button> ·
+      <select id="lang" title="语言 / Language">
+        <option value="zh">中文</option>
+        <option value="en">English</option>
+      </select>
     </div>
   </header>
   <main id="plugins"></main>
   <section id="rollback-section" hidden>
-    <button id="rollback" class="danger">Roll back last change</button>
-    <span class="hint">Restores the profile manifest recorded before the last install / uninstall / update.</span>
+    <button id="rollback" class="danger">回滚上次更改</button>
+    <span class="hint" id="rollback-hint"></span>
   </section>
   <footer id="status"></footer>
   <script src="market.js"></script>

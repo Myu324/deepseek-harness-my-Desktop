@@ -108,6 +108,18 @@ describe('parseMarketFeed', () => {
     feed.plugins[0] = { ...feed.plugins[0]!, source: 'file:///etc/passwd' }
     expect(() => parseMarketFeed(feed)).toThrow(/https source URL/)
   })
+
+  it('accepts and validates the optional Chinese fields', () => {
+    const feed = validFeed() as { plugins: Array<Record<string, unknown>> }
+    feed.plugins[0] = { ...feed.plugins[0]!, titleZh: 'Web UI 全家桶', descriptionZh: '一键装齐。' }
+    const parsed = parseMarketFeed(feed)
+    expect(parsed.plugins[0]?.titleZh).toBe('Web UI 全家桶')
+    expect(parsed.plugins[0]?.descriptionZh).toBe('一键装齐。')
+    const first = feed.plugins[0]
+    if (first === undefined) throw new Error('fixture has no entries')
+    feed.plugins[0] = { ...first, titleZh: 42 }
+    expect(() => parseMarketFeed(feed)).toThrow(/titleZh as text/)
+  })
 })
 
 describe('fetchMarketFeed', () => {

@@ -55,6 +55,7 @@ describe('readShellSettings', () => {
       openAtLogin: 'yes',
       registry: 'https://registry.npmmirror.com',
       nodeMirror: 'not a url',
+      locale: 'en',
     }))
     await expect(readShellSettings(path)).resolves.toEqual({
       minimizeToTray: false,
@@ -63,6 +64,7 @@ describe('readShellSettings', () => {
       registry: 'https://registry.npmmirror.com',
       nodeMirror: DEFAULT_SHELL_SETTINGS.nodeMirror,
       pluginFeedUrl: DEFAULT_SHELL_SETTINGS.pluginFeedUrl,
+      locale: 'en',
     })
   })
 
@@ -75,6 +77,7 @@ describe('readShellSettings', () => {
       registry: 'https://registry.npmmirror.com',
       nodeMirror: 'https://npmmirror.com/mirrors/node',
       pluginFeedUrl: 'https://raw.githubusercontent.com/example/feed.json',
+      locale: 'zh' as const,
     }
     await writeShellSettings(path, settings)
     await expect(readShellSettings(path)).resolves.toEqual(settings)

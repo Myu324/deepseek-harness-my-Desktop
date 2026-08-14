@@ -10,6 +10,7 @@
 
 import { readFile, stat } from 'node:fs/promises'
 import { writeFileAtomic } from '@deepseek-ai/dsh-atomic-write'
+import { isShellLocale, type ShellLocale } from './shell-i18n.ts'
 
 /** Shell-owned settings. */
 export interface ShellSettings {
@@ -25,6 +26,8 @@ export interface ShellSettings {
   readonly nodeMirror: string
   /** The plugin marketplace feed URL. */
   readonly pluginFeedUrl: string
+  /** The shell UI language. */
+  readonly locale: ShellLocale
 }
 
 /** Defaults for every field; a missing or malformed file falls back to these. */
@@ -35,6 +38,7 @@ export const DEFAULT_SHELL_SETTINGS: ShellSettings = {
   registry: 'https://registry.npmjs.org',
   nodeMirror: 'https://npmmirror.com/mirrors/node',
   pluginFeedUrl: 'https://raw.githubusercontent.com/Myu324/deepseek-harness-my-Desktop/master/apps/desktop/plugin-feed.json',
+  locale: 'zh',
 }
 
 /** A parsed settings document: each field is its own fallback decision. */
@@ -45,6 +49,7 @@ interface ParsedSettings {
   readonly registry: string | undefined
   readonly nodeMirror: string | undefined
   readonly pluginFeedUrl: string | undefined
+  readonly locale: ShellLocale | undefined
 }
 
 /** Whether a value is an http(s) URL. */
@@ -61,6 +66,7 @@ function parseSettings(content: string): ParsedSettings {
     registry: undefined,
     nodeMirror: undefined,
     pluginFeedUrl: undefined,
+    locale: undefined,
   }
   let document: unknown
   try {
@@ -79,6 +85,7 @@ function parseSettings(content: string): ParsedSettings {
     registry: isHttpUrl(record.registry) ? record.registry : undefined,
     nodeMirror: isHttpUrl(record.nodeMirror) ? record.nodeMirror : undefined,
     pluginFeedUrl: isHttpUrl(record.pluginFeedUrl) ? record.pluginFeedUrl : undefined,
+    locale: isShellLocale(record.locale) ? record.locale : undefined,
   }
 }
 
@@ -104,6 +111,7 @@ export async function readShellSettings(filePath: string): Promise<ShellSettings
     registry: parsed.registry ?? DEFAULT_SHELL_SETTINGS.registry,
     nodeMirror: parsed.nodeMirror ?? DEFAULT_SHELL_SETTINGS.nodeMirror,
     pluginFeedUrl: parsed.pluginFeedUrl ?? DEFAULT_SHELL_SETTINGS.pluginFeedUrl,
+    locale: parsed.locale ?? DEFAULT_SHELL_SETTINGS.locale,
   }
 }
 

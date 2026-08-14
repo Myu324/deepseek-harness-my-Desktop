@@ -23,7 +23,7 @@ node --import tsx/esm apps/desktop/scripts/engine-store-e2e.mjs <storeRoot>
 
 ## 插件市场
 
-托盘的 **Plugin Marketplace** 打开一个壳自有窗口，展示精选 feed（`apps/desktop/plugin-feed.json`，经仓库 raw URL 服务；壳设置的 `pluginFeedUrl` 可指向别处）。每个 feed 条目声明其 npm spec、来源仓库、官方/社区信任级别与构建所针对的引擎 semver 范围；页面将其与实时 profile 合并，提供安装（家族聚合包一键装齐）、更新、卸载，以及基于清单快照的回滚。安装走真实的 `dsh plugin --profile web` pnpm 前向器：pnpm 由引擎仓库运行时目录预置（`runtime/pnpm`，用自带 npm 安装）并前置进命令 PATH。pnpm 会拦截未经评审的构建脚本；市场把 profile workspace 里 pnpm 写入的 `allowBuilds` 占位条目解析为评审策略——`cloudflared: true`（SSH 隧道需要的预编译二进制）、`ssh2`/`cpu-features: false`（用户机无法编译的可选原生绑定）——评审集之外的包保持拦截并响亮失败。真实环境的完整流程可运行：
+托盘的 **Plugin Marketplace** 打开一个壳自有窗口，展示精选 feed（`apps/desktop/plugin-feed.json`，经仓库 raw URL 服务；壳设置的 `pluginFeedUrl` 可指向别处）。每个 feed 条目声明其 npm spec、来源仓库、官方/社区信任级别与构建所针对的引擎 semver 范围，并可带 `titleZh`/`descriptionZh` 中文字段（中文界面优先显示）；页面将其与实时 profile 合并，提供安装（家族聚合包一键装齐）、更新、卸载，以及基于清单快照的回滚。安装走真实的 `dsh plugin --profile web` pnpm 前向器：pnpm 由引擎仓库运行时目录预置（`runtime/pnpm`，用自带 npm 安装）并前置进命令 PATH。pnpm 会拦截未经评审的构建脚本；市场把 profile workspace 里 pnpm 写入的 `allowBuilds` 占位条目解析为评审策略——`cloudflared: true`（SSH 隧道需要的预编译二进制）、`ssh2`/`cpu-features: false`（用户机无法编译的可选原生绑定）——评审集之外的包保持拦截并响亮失败。新插件只需在 feed 加条目并推送，所有已装客户端即可看到，无需重新打包。真实环境的完整流程可运行：
 
 ```sh
 node --import tsx/esm apps/desktop/scripts/plugin-market-e2e.mjs <storeRoot>
@@ -62,4 +62,4 @@ Electron 二进制与 NSIS 工具链默认从 GitHub 下载；设置 `ELECTRON_M
 
 ## 当前范围
 
-单实例壳；引擎 spawn 带自动空闲端口选择与 EADDRINUSE 重试；就绪判定走引擎的 `dsh web:` 公告行，HTTP 探测兜底；沙箱窗口加载引擎 URL；托盘菜单（打开/重启引擎/开机自启/壳更新/引擎更新/插件市场/退出）；关窗驻留托盘使定时任务继续运行；更新事件的系统通知；壳自更新接线（electron-updater，仅打包安装启用）；受管引擎版本仓库（健康检查、原子指针切换、last-good 回退）；基于 `dsh plugin` 前向器的插件市场；electron-builder 打包（按用户 NSIS + 便携 zip）。所有运行时依赖都打进 `lib/main.js`，打包产物不带 node_modules。
+单实例壳；引擎 spawn 带自动空闲端口选择与 EADDRINUSE 重试；就绪判定走引擎的 `dsh web:` 公告行，HTTP 探测兜底；沙箱窗口加载引擎 URL；托盘菜单（打开/重启引擎/开机自启/语言/壳更新/引擎更新/插件市场/退出）；关窗驻留托盘使定时任务继续运行；更新事件的系统通知；壳自更新接线（electron-updater，仅打包安装启用）；受管引擎版本仓库（健康检查、原子指针切换、last-good 回退）；基于 `dsh plugin` 前向器的插件市场；壳界面与市场页双语（默认中文，托盘「语言」菜单或页面选择器切换）；electron-builder 打包（按用户 NSIS + 便携 zip）。所有运行时依赖都打进 `lib/main.js`，打包产物不带 node_modules。

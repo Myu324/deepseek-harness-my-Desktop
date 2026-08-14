@@ -5,6 +5,7 @@ const { contextBridge, ipcRenderer } = require('electron')
 
 contextBridge.exposeInMainWorld('market', {
   list: () => ipcRenderer.invoke('market:list'),
+  setLocale: locale => ipcRenderer.invoke('market:set-locale', locale),
   install: spec => ipcRenderer.invoke('market:install', spec),
   uninstall: name => ipcRenderer.invoke('market:uninstall', name),
   update: name => ipcRenderer.invoke('market:update', name),

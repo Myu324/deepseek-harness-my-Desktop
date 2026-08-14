@@ -4,10 +4,78 @@
     {
       "package": "@linxin666/dsh-web-ui-all",
       "title": "Web UI 全家桶 (dsh-web-ui-all)",
-      "description": "One-click install of the whole dsh-web-ui family: SSH operations (dsh-ssh), the task board (dsh-task-board), the right-hand panel (dsh-aionui-panel), skins, and more.",
+      "titleZh": "Web UI 全家桶 (dsh-web-ui-all)",
+      "description": "One-click install of the whole dsh-web-ui family: SSH operations, the task board, the right-hand panel, skins, and more.",
+      "descriptionZh": "一键装齐整个 dsh-web-ui 家族：SSH 运维、任务看板、右侧面板、皮肤等。",
       "source": "https://github.com/zhu1090093659/dsh-web-ui",
       "official": false,
       "bundles": true,
+      "compatibility": ">=0.1.0-rc.6"
+    },
+    {
+      "package": "@linxin666/dsh-ssh",
+      "title": "SSH 远程运维 (dsh-ssh)",
+      "titleZh": "SSH 远程运维 (dsh-ssh)",
+      "description": "Manage remote hosts: host configuration, persistent connections, exec/upload/download, tunnels, and a web terminal.",
+      "descriptionZh": "远程主机运维：主机配置、持久连接、执行命令、上传下载、隧道与 Web 终端。",
+      "source": "https://github.com/zhu1090093659/dsh-web-ui",
+      "official": false,
+      "bundles": false,
+      "compatibility": ">=0.1.0-rc.6"
+    },
+    {
+      "package": "@linxin666/dsh-task-board",
+      "title": "任务看板 (dsh-task-board)",
+      "titleZh": "任务看板 (dsh-task-board)",
+      "description": "A multi-column task board whose tasks really execute, with cron scheduling.",
+      "descriptionZh": "多列任务看板，任务可真实执行，支持 cron 定时调度。",
+      "source": "https://github.com/zhu1090093659/dsh-web-ui",
+      "official": false,
+      "bundles": false,
+      "compatibility": ">=0.1.0-rc.6"
+    },
+    {
+      "package": "@linxin666/dsh-live-stats",
+      "title": "实时状态 (dsh-live-stats)",
+      "titleZh": "实时状态 (dsh-live-stats)",
+      "description": "Live runtime statistics for the harness.",
+      "descriptionZh": "展示 harness 的实时运行统计。",
+      "source": "https://github.com/zhu1090093659/dsh-web-ui",
+      "official": false,
+      "bundles": false,
+      "compatibility": ">=0.1.0-rc.6"
+    },
+    {
+      "package": "@linxin666/dsh-pet",
+      "title": "桌面宠物 (dsh-pet)",
+      "titleZh": "桌面宠物 (dsh-pet)",
+      "description": "A desktop pet companion for the Web GUI.",
+      "descriptionZh": "Web GUI 里的桌面宠物伙伴。",
+      "source": "https://github.com/zhu1090093659/dsh-web-ui",
+      "official": false,
+      "bundles": false,
+      "compatibility": ">=0.1.0-rc.6"
+    },
+    {
+      "package": "@linxin666/dsh-remote-web-ui",
+      "title": "远程 Web UI (dsh-remote-web-ui)",
+      "titleZh": "远程 Web UI (dsh-remote-web-ui)",
+      "description": "Remote Web UI capabilities with settings integration.",
+      "descriptionZh": "远程 Web UI 能力，带设置集成。",
+      "source": "https://github.com/zhu1090093659/dsh-web-ui",
+      "official": false,
+      "bundles": false,
+      "compatibility": ">=0.1.0-rc.6"
+    },
+    {
+      "package": "@linxin666/dsh-skins",
+      "title": "皮肤中心 (dsh-skins)",
+      "titleZh": "皮肤中心 (dsh-skins)",
+      "description": "The skin center: themes and appearance assets for the Web GUI.",
+      "descriptionZh": "皮肤中心：Web GUI 的主题与外观资源。",
+      "source": "https://github.com/zhu1090093659/dsh-web-ui",
+      "official": false,
+      "bundles": false,
       "compatibility": ">=0.1.0-rc.6"
     }
   ]

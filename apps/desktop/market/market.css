@@ -54,6 +54,15 @@ main { padding: 16px 24px; display: grid; gap: 12px; }
   padding: 14px 16px;
 }
 
+select {
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 3px 6px;
+  font: inherit;
+}
+
 .head { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
 
 h2 { font-size: 15px; margin: 0; }
