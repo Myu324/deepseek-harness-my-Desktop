@@ -1,0 +1,61 @@
+# Build the desktop shell artifacts (NSIS + portable on Windows, dmg + zip on
+# macOS) and upload them as run artifacts. Manual dispatch only: distribution
+# (GitHub Releases upload, code signing, notarization) is a separate decision,
+# so this workflow proves the artifacts build and hands them to the human.
+#
+# dmg assembly can only run on macOS runners (electron-builder requires
+# hdiutil); Windows builds stay on the native runner.
+name: Desktop artifacts
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  desktop:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-2025
+            script: pack
+            name: windows
+          - os: macos-latest
+            script: pack:mac
+            name: macos
+    name: Build desktop artifacts (${{ matrix.name }})
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@v4
+        with:
+          dest: ${{ runner.temp }}/setup-pnpm
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+
+      - name: Install (immutable)
+        run: pnpm install --frozen-lockfile
+
+      - name: Build the desktop shell
+        run: pnpm --filter @deepseek-ai/dsh-desktop run build
+
+      - name: Build the installer artifacts
+        run: pnpm --filter @deepseek-ai/dsh-desktop run ${{ matrix.script }}
+        env:
+          # macOS builds without an Apple Developer certificate stay unsigned
+          # (hardenedRuntime is off for that path in electron-builder.yml).
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dsh-desktop-${{ matrix.name }}
+          path: apps/desktop/.artifacts/*
+          if-no-files-found: error
+          retention-days: 7

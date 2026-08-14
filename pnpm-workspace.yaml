@@ -53,6 +53,11 @@ allowBuilds:
   # The Python runtime deploy includes the reviewed workspace postinstall that
   # restores the executable bit on node-pty's macOS spawn helper.
   '@deepseek-ai/dsh-subprocess-local@file:packages/subprocess/subprocess-local': true
+  # Desktop shell: the Electron postinstall downloads the platform binary
+  # (mirrored via ELECTRON_MIRROR), and electron-winstaller ships only
+  # provisioning scripts electron-builder does not call at build time.
+  electron: true
+  electron-winstaller: false
 
 minimumReleaseAgeExclude:
   # Fresh pi-ai releases carry the model catalog updates that are the whole
@@ -69,4 +74,5 @@ minimumReleaseAgeExclude:
   - node-addon-require-builtin@0.1.4
 
 patchedDependencies:
+  app-builder-lib@26.15.7: patches/app-builder-lib@26.15.7.patch
   node-pty@1.1.0: patches/node-pty@1.1.0.patch

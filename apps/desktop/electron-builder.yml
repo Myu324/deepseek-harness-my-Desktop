@@ -1,0 +1,45 @@
+# electron-builder configuration: produces the per-user NSIS installer and a
+# portable zip. The published npm package carries only the built main bundle
+# (see package.json files); this config drives the CI installer build and the
+# app-update.yml feed electron-updater reads. Every runtime dependency is
+# bundled into lib/main.js (tsdown), so the app ships without node_modules.
+appId: com.deepseek-ai.harness.desktop
+productName: DeepSeek Harness
+directories:
+  output: .artifacts
+  buildResources: build
+# Reuse the workspace's installed Electron dist instead of re-downloading it
+# (also sidesteps the @electron/get cache bug under pnpm).
+electronDist: node_modules/electron/dist
+files:
+  - lib/**/*.js
+  - package.json
+  - build/icon.png
+  - market/**
+asar: true
+win:
+  icon: build/icon.ico
+  target:
+    - nsis
+    - portable
+mac:
+  icon: build/icon.png
+  category: public.app-category.developer-tools
+  target:
+    - dmg
+    - zip
+  # Local/CI builds without an Apple Developer certificate stay unsigned.
+  # Signing + notarization flip this back to true together with an identity.
+  hardenedRuntime: false
+dmg:
+  title: DeepSeek Harness ${version}
+nsis:
+  oneClick: true
+  perMachine: false
+  allowElevation: false
+  runAfterFinish: true
+  deleteAppDataOnUninstall: false
+publish:
+  provider: github
+  owner: Myu324
+  repo: deepseek-harness-my-Desktop

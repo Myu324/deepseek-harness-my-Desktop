@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "plugins": [
+    {
+      "package": "@linxin666/dsh-web-ui-all",
+      "title": "Web UI 全家桶 (dsh-web-ui-all)",
+      "description": "One-click install of the whole dsh-web-ui family: SSH operations (dsh-ssh), the task board (dsh-task-board), the right-hand panel (dsh-aionui-panel), skins, and more.",
+      "source": "https://github.com/zhu1090093659/dsh-web-ui",
+      "official": false,
+      "bundles": true,
+      "compatibility": ">=0.1.0-rc.6"
+    }
+  ]
+}

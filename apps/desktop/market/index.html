@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Plugin Marketplace — DeepSeek Harness</title>
+  <link rel="stylesheet" href="market.css" />
+</head>
+<body>
+  <header>
+    <h1>Plugin Marketplace</h1>
+    <div class="subtitle">
+      Engine <code id="engine-version">…</code> ·
+      <button id="refresh" class="link">Refresh</button>
+    </div>
+  </header>
+  <main id="plugins"></main>
+  <section id="rollback-section" hidden>
+    <button id="rollback" class="danger">Roll back last change</button>
+    <span class="hint">Restores the profile manifest recorded before the last install / uninstall / update.</span>
+  </section>
+  <footer id="status"></footer>
+  <script src="market.js"></script>
+</body>
+</html>

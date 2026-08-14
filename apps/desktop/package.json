@@ -1,0 +1,40 @@
+{
+  "name": "@deepseek-ai/dsh-desktop",
+  "description": "DeepSeek Harness Windows desktop shell: hosts the dsh web engine in a native window and manages engine, plugin, and shell updates",
+  "version": "0.1.0-rc.5",
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/deepseek-ai/deepseek-harness.git",
+    "directory": "apps/desktop"
+  },
+  "type": "module",
+  "main": "lib/main.js",
+  "productName": "DeepSeek Harness",
+  "files": [
+    "lib/*.js",
+    "market/**/*"
+  ],
+  "license": "MIT",
+  "scripts": {
+    "build": "tsc -b && tsdown",
+    "dev": "npm run build && electron .",
+    "start": "electron .",
+    "icons": "node scripts/gen-icons.mjs",
+    "pack": "electron-builder --win nsis portable",
+    "pack:mac": "electron-builder --mac dmg zip"
+  },
+  "devDependencies": {
+    "@deepseek-ai/dsh-app-boot": "workspace:^",
+    "@deepseek-ai/dsh-atomic-write": "workspace:^",
+    "@types/semver": "^7.8.0",
+    "electron": "^43.4.0",
+    "electron-builder": "^26.15.7",
+    "electron-updater": "^6.8.9",
+    "fflate": "^0.8.3",
+    "semver": "^7.8.5",
+    "tar": "^7.5.22"
+  }
+}

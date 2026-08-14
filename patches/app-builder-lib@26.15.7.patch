@@ -1,0 +1,23 @@
+diff --git a/out/util/electronGet.js b/out/util/electronGet.js
+index db7c4e03a2191261de9e0eab9ac50cb268f8ee4b..e44e2e9608b2c89e8d65261a504c771ca6026920 100644
+--- a/out/util/electronGet.js
++++ b/out/util/electronGet.js
+@@ -63,12 +63,16 @@ function resolveCacheMode() {
+     var _a;
+     const varName = "ELECTRON_DOWNLOAD_CACHE_MODE";
+     const cacheOverride = (_a = process.env[varName]) === null || _a === void 0 ? void 0 : _a.trim();
+-    if (cacheOverride && Number(cacheOverride) in get_1.ElectronDownloadCacheMode) {
++    // PATCHED (deepseek-harness): this package declares @electron/get ^3.0.0,
++    // which exports no ElectronDownloadCacheMode, so the original branch
++    // crashes reading `.ReadWrite` of undefined. The enum's ReadWrite value is
++    // 0 and ReadOnly is 1; spell them as numbers instead of the missing export.
++    if (cacheOverride && (Number(cacheOverride) === 0 || Number(cacheOverride) === 1)) {
+         const mode = Number(cacheOverride);
+         builder_util_1.log.debug({ mode }, `cache mode overridden via env var ${varName}`);
+         return mode;
+     }
+-    return get_1.ElectronDownloadCacheMode.ReadWrite;
++    return 0;
+ }
+ /**
+  * Returns true when `destPath` is safely contained within `dir` (direct child or deeper).
