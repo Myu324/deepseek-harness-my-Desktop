@@ -62,4 +62,4 @@ Electron 二进制与 NSIS 工具链默认从 GitHub 下载；设置 `ELECTRON_M
 
 ## 当前范围
 
-单实例壳；引擎 spawn 带自动空闲端口选择与 EADDRINUSE 重试；就绪判定走引擎的 `dsh web:` 公告行，HTTP 探测兜底；沙箱窗口加载引擎 URL，并注入左下角设置浮层（引擎状态/重启、开机自启、语言、壳/引擎更新检查、插件市场、退出），与托盘功能镜像；关窗驻留托盘使定时任务继续运行；更新事件的系统通知；壳自更新接线（electron-updater，仅打包安装启用）；受管引擎版本仓库（健康检查、原子指针切换、last-good 回退）；插件市场（内嵌社区 webview + 终端安装 + 客户端重启）；壳界面双语（默认中文，托盘「语言」菜单、浮层或市场选择器切换）；electron-builder 打包（按用户 NSIS + 便携 zip）。所有运行时依赖都打进 `lib/main.js`，打包产物不带 node_modules。
+单实例壳；引擎 spawn 带自动空闲端口选择与 EADDRINUSE 重试；就绪判定走引擎的 `dsh web:` 公告行，HTTP 探测兜底；沙箱窗口加载引擎 URL，其原生设置页多出一个「桌面客户端」分区——`settings.section` 贡献（`packages/client/ui-shell-settings`），仅在桌面 `window.shell` 桥存在时注册，与托盘功能镜像（引擎状态/重启、开机自启、语言、壳/引擎更新检查、插件市场、退出）；关窗驻留托盘使定时任务继续运行；更新事件的系统通知；壳自更新接线（electron-updater，仅打包安装启用）；受管引擎版本仓库（健康检查、原子指针切换、last-good 回退）；插件市场（内嵌社区 webview + 终端安装 + 客户端重启）；壳界面双语（默认中文，托盘「语言」菜单、设置分区或市场选择器切换）；electron-builder 打包（按用户 NSIS + 便携 zip）。所有运行时依赖都打进 `lib/main.js`，打包产物不带 node_modules。

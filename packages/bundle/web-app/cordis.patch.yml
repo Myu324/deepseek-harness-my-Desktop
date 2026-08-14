@@ -263,6 +263,12 @@
     - id: ui-settings-plugins
       name: '@deepseek-ai/dsh-client-ui-settings-plugins'
 
+    # Desktop-shell settings: engine restart, login item, shell language, and
+    # shell actions over the Electron preload bridge. The section registers
+    # only when window.shell exists, so plain browsers never see it.
+    - id: ui-shell-settings
+      name: '@deepseek-ai/dsh-client-ui-shell-settings'
+
     # Plan control: the composer plan seat over the plan projection + /plan channel.
     - id: ui-plan
       name: '@deepseek-ai/dsh-client-ui-plan'

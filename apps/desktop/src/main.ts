@@ -41,7 +41,6 @@ import {
 } from './plugin-market.ts'
 import { readShellSettings, writeShellSettings, type ShellSettings } from './shell-settings.ts'
 import { SHELL_LOCALES, shellT, type ShellMessageKey, type ShellLocale } from './shell-i18n.ts'
-import { overlayScriptFromSource } from './settings-overlay.ts'
 import { wireUpdater } from './shell-updater.ts'
 
 // electron-updater is CommonJS; its module.exports is the default export.
@@ -275,21 +274,6 @@ function createWindow(): BrowserWindow {
   main.webContents.on('did-fail-load', (_event, code, description, validatedUrl) => {
     // The engine died or moved; keep the shell alive and say so in the log.
     logLine(`window load failed (${code} ${description}) for ${validatedUrl}`)
-  })
-  main.webContents.on('did-finish-load', () => {
-    // Inject the settings overlay into the engine page only — never into the
-    // preparing page or any other document.
-    if (!main.webContents.getURL().startsWith('http://127.0.0.1')) return
-    let source: string
-    try {
-      source = readFileSync(join(app.getAppPath(), 'market', 'settings-overlay.js'), 'utf8')
-    } catch {
-      logLine('settings overlay asset missing; running without the in-app settings panel')
-      return
-    }
-    void main.webContents.executeJavaScript(overlayScriptFromSource(source)).catch((error: unknown) => {
-      logLine(`settings overlay injection failed: ${describeError(error)}`)
-    })
   })
   main.on('close', (event) => {
     if (quitting || settings === undefined || !settings.minimizeToTray) return
