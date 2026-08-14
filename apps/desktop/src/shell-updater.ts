@@ -56,7 +56,8 @@ export function wireUpdater(updater: UpdaterLike, hooks: UpdaterHooks, channel: 
       try {
         await updater.checkForUpdates()
       } catch (error) {
-        hooks.onError(error instanceof Error ? error.message : String(error))
+        const stack = error instanceof Error ? error.stack ?? error.message : String(error)
+        hooks.onError(stack)
       }
     },
     installNow(): void {

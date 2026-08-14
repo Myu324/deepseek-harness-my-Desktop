@@ -77,13 +77,14 @@ describe('wireUpdater', () => {
     expect(recorded.errors).toEqual(['network down'])
   })
 
-  it('reports a rejected check through the error hook', async () => {
+  it('reports a rejected check through the error hook with its stack', async () => {
     const fake = fakeUpdater()
     const recorded = fakeHooks()
     const wired = wireUpdater(fake.updater, recorded.hooks, 'stable')
     fake.state.checkError = new Error('not packaged')
     await wired.check()
-    expect(recorded.errors).toEqual(['not packaged'])
+    expect(recorded.errors).toHaveLength(1)
+    expect(recorded.errors[0]).toContain('not packaged')
   })
 
   it('stays silent on a successful check', async () => {
