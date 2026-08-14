@@ -244,7 +244,12 @@ export function parseMarketFeed(value: unknown): MarketFeed {
 export async function fetchMarketFeed(url: string, fetchFn?: (target: string) => Promise<unknown>): Promise<MarketFeed> {
   const fetchImpl = fetchFn ?? (async (target: string): Promise<unknown> => {
     const response = await fetch(target)
-    if (!response.ok) throw new Error(`plugin feed fetch failed: HTTP ${response.status} from ${target}`)
+    if (!response.ok) {
+      throw new Error(
+        `plugin feed fetch failed: HTTP ${response.status} from ${target}`
+        + ' — check that the feed file exists at that URL, or point pluginFeedUrl (in the shell settings) at another feed',
+      )
+    }
     return await response.json()
   })
   return parseMarketFeed(await fetchImpl(url))
