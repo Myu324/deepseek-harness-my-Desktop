@@ -16,6 +16,7 @@ files:
   - package.json
   - build/icon.png
   - market/**
+  - plugin-feed.json
 asar: true
 win:
   icon: build/icon.ico

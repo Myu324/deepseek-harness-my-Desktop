@@ -24,10 +24,8 @@ export interface ShellSettings {
   readonly registry: string
   /** The mirror the portable node sidecar downloads from. */
   readonly nodeMirror: string
-  /** The plugin marketplace feed URL. */
-  readonly pluginFeedUrl: string
-  /** The community plugin index URL the marketplace merges in. */
-  readonly communityIndexUrl: string
+  /** The community page the marketplace embeds in its webview. */
+  readonly communityPageUrl: string
   /** The shell UI language. */
   readonly locale: ShellLocale
 }
@@ -39,8 +37,7 @@ export const DEFAULT_SHELL_SETTINGS: ShellSettings = {
   updateChannel: 'stable',
   registry: 'https://registry.npmjs.org',
   nodeMirror: 'https://npmmirror.com/mirrors/node',
-  pluginFeedUrl: 'https://raw.githubusercontent.com/Myu324/deepseek-harness-my-Desktop/master/apps/desktop/plugin-feed.json',
-  communityIndexUrl: 'https://raw.githubusercontent.com/zhu1090093659/dsh-web-ui/main/packages/dsh-web-ui-settings/community.json',
+  communityPageUrl: 'https://github.com/zhu1090093659/dsh-web-ui',
   locale: 'zh',
 }
 
@@ -51,8 +48,7 @@ interface ParsedSettings {
   readonly updateChannel: 'stable' | 'beta' | undefined
   readonly registry: string | undefined
   readonly nodeMirror: string | undefined
-  readonly pluginFeedUrl: string | undefined
-  readonly communityIndexUrl: string | undefined
+  readonly communityPageUrl: string | undefined
   readonly locale: ShellLocale | undefined
 }
 
@@ -69,8 +65,7 @@ function parseSettings(content: string): ParsedSettings {
     updateChannel: undefined,
     registry: undefined,
     nodeMirror: undefined,
-    pluginFeedUrl: undefined,
-    communityIndexUrl: undefined,
+    communityPageUrl: undefined,
     locale: undefined,
   }
   let document: unknown
@@ -89,8 +84,7 @@ function parseSettings(content: string): ParsedSettings {
     updateChannel: record.updateChannel === 'stable' || record.updateChannel === 'beta' ? record.updateChannel : undefined,
     registry: isHttpUrl(record.registry) ? record.registry : undefined,
     nodeMirror: isHttpUrl(record.nodeMirror) ? record.nodeMirror : undefined,
-    pluginFeedUrl: isHttpUrl(record.pluginFeedUrl) ? record.pluginFeedUrl : undefined,
-    communityIndexUrl: isHttpUrl(record.communityIndexUrl) ? record.communityIndexUrl : undefined,
+    communityPageUrl: isHttpUrl(record.communityPageUrl) ? record.communityPageUrl : undefined,
     locale: isShellLocale(record.locale) ? record.locale : undefined,
   }
 }
@@ -116,8 +110,7 @@ export async function readShellSettings(filePath: string): Promise<ShellSettings
     updateChannel: parsed.updateChannel ?? DEFAULT_SHELL_SETTINGS.updateChannel,
     registry: parsed.registry ?? DEFAULT_SHELL_SETTINGS.registry,
     nodeMirror: parsed.nodeMirror ?? DEFAULT_SHELL_SETTINGS.nodeMirror,
-    pluginFeedUrl: parsed.pluginFeedUrl ?? DEFAULT_SHELL_SETTINGS.pluginFeedUrl,
-    communityIndexUrl: parsed.communityIndexUrl ?? DEFAULT_SHELL_SETTINGS.communityIndexUrl,
+    communityPageUrl: parsed.communityPageUrl ?? DEFAULT_SHELL_SETTINGS.communityPageUrl,
     locale: parsed.locale ?? DEFAULT_SHELL_SETTINGS.locale,
   }
 }

@@ -1,11 +1,12 @@
 /**
- * The plugin marketplace: a curated feed of installable profile plugins over
- * the existing `dsh plugin --profile web` pnpm forwarder. Each feed entry
- * states its npm spec, source repository, official/community trust, and the
- * engine semver range it was built against; the market merges that with the
- * live profile manifest and offers install / uninstall / update, plus a
- * manifest-snapshot rollback for a broken install. This module is plain Node
- * and Electron-free; the shell injects the command runner and feed fetcher.
+ * The plugin marketplace: a locally shipped curated feed of installable
+ * profile plugins over the existing `dsh plugin --profile web` pnpm
+ * forwarder. The market window embeds the community page in a webview and
+ * drives installs through a terminal-style command surface; this module owns
+ * the feed parsing, the profile state merge, the command grammar, the
+ * install / uninstall / update operations, the manifest-snapshot rollback,
+ * and the reviewed build-script policy. Plain Node and Electron-free; the
+ * shell injects the command runner.
  * @module @deepseek-ai/dsh-desktop/plugin-market
  */
 
@@ -40,7 +41,7 @@ interface MarketPluginEntry {
   readonly compatibility?: string
 }
 
-/** The feed document the marketplace fetches. */
+/** The feed document the marketplace reads from disk. */
 export interface MarketFeed {
   /** The feed format version; only 1 exists. */
   readonly version: 1
@@ -199,9 +200,9 @@ function isText(value: unknown): value is string {
 }
 
 /**
- * Parse and validate a feed document at the wire boundary. Unknown fields
+ * Parse and validate a feed document at the file boundary. Unknown fields
  * are ignored; a malformed entry or an unsupported feed version fails loud.
- * @param value - the fetched JSON value.
+ * @param value - the parsed JSON value.
  * @returns the validated feed.
  */
 export function parseMarketFeed(value: unknown): MarketFeed {
@@ -246,82 +247,6 @@ export function parseMarketFeed(value: unknown): MarketFeed {
     }
   })
   return { version: 1, plugins }
-}
-
-/**
- * Parse and validate the community plugin index the web-ui family maintains
- * (`id/name/nameEn/author/description/descriptionEn/repo/npm`). Entries
- * without an npm field install from their repository as a git spec.
- * @param value - the fetched JSON value.
- * @returns the mapped feed entries.
- */
-export function parseCommunityIndex(value: unknown): MarketPluginEntry[] {
-  if (!Array.isArray(value)) throw new Error('community index must be a JSON array')
-  return value.map((entry, index): MarketPluginEntry => {
-    const where = `community index entry ${index}`
-    if (entry === null || typeof entry !== 'object' || Array.isArray(entry)) {
-      throw new Error(`${where} must be an object`)
-    }
-    const item = entry as Record<string, unknown>
-    if (!isHttpsUrl(item.repo)) throw new Error(`${where} must declare an https repo URL`)
-    const nameEn = isText(item.nameEn) ? item.nameEn : undefined
-    const name = isText(item.name) ? item.name : undefined
-    if (nameEn === undefined && name === undefined) throw new Error(`${where} must declare a name`)
-    const title: string = nameEn ?? name ?? ''
-    const titleZh: string = name ?? nameEn ?? ''
-    const description: string = isText(item.descriptionEn)
-      ? item.descriptionEn
-      : isText(item.description) ? item.description : ''
-    const descriptionZh: string = isText(item.description) ? item.description : description
-    const npm = isText(item.npm) ? item.npm : undefined
-    const repo = item.repo
-    return {
-      package: npm ?? `git+${repo}.git`,
-      title,
-      ...titleZh !== title && { titleZh },
-      description,
-      ...descriptionZh !== description && { descriptionZh },
-      ...isText(item.author) && { author: item.author },
-      source: repo,
-      official: false,
-      bundles: false,
-    }
-  })
-}
-
-/** One feed fetch with transient-network retries; deterministic HTTP errors throw immediately. */
-async function fetchWithRetries(target: string): Promise<unknown> {
-  for (let attempt = 1; attempt <= 3; attempt += 1) {
-    try {
-      const response = await fetch(target)
-      if (!response.ok) {
-        throw new Error(
-          `plugin feed fetch failed: HTTP ${response.status} from ${target}`
-          + ' — check that the feed file exists at that URL, or point pluginFeedUrl (in the shell settings) at another feed',
-        )
-      }
-      return await response.json()
-    } catch (error) {
-      // A deterministic HTTP failure carries the marker prefix above; only
-      // network-level failures (fetch threw) deserve a retry.
-      const deterministic = error instanceof Error && error.message.startsWith('plugin feed fetch failed: HTTP')
-      if (attempt === 3 || deterministic) throw error
-      await new Promise(resolve => setTimeout(resolve, attempt * 1000))
-    }
-  }
-  // Unreachable: every loop iteration either returns or throws.
-  throw new Error(`plugin feed fetch failed for ${target}`)
-}
-
-/**
- * Fetch and parse the feed at one URL.
- * @param url - the feed URL.
- * @param fetchFn - fetcher override (tests).
- * @returns the validated feed.
- */
-export async function fetchMarketFeed(url: string, fetchFn?: (target: string) => Promise<unknown>): Promise<MarketFeed> {
-  const fetchImpl = fetchFn ?? fetchWithRetries
-  return parseMarketFeed(await fetchImpl(url))
 }
 
 /**
@@ -404,88 +329,58 @@ export async function rollbackProfile(
   await rm(path, { force: true })
 }
 
-/** The marketplace's read and mutating operations. */
-export interface MarketOperations {
-  /** The feed (curated + community) merged with the live profile and engine facts. */
-  list(): Promise<{ readonly engineVersion: string | undefined; readonly plugins: PluginState[] }>
-  /** The plugin's README, from the npm registry (npm specs) or the source repo (git specs). */
-  readme(spec: string, source: string): Promise<string>
-  /** Install one feed entry's spec (records a rollback snapshot first). */
-  install(spec: string): Promise<void>
-  /** Uninstall one installed plugin by name. */
-  uninstall(name: string): Promise<void>
-  /** Update one installed plugin by name. */
-  update(name: string): Promise<void>
-  /** Restore the profile to its pre-operation snapshot. */
-  rollback(): Promise<void>
+/**
+ * Parse one terminal command into `dsh plugin` arguments. The grammar is the
+ * four verbs a user needs: `add <spec>`, `remove <name>`, `update <name>`,
+ * and `install` (reconcile), plus `rollback`.
+ * @param command - the raw command line.
+ * @returns the `dsh plugin` argument list.
+ */
+export function parsePluginCommand(command: string): string[] {
+  const parts = command.trim().split(/\s+/).filter(part => part !== '')
+  const verb = parts[0] ?? ''
+  const rest = parts.slice(1)
+  switch (verb) {
+    case 'add': {
+      const spec = rest[0]
+      if (rest.length !== 1 || spec === undefined) throw new Error('usage: add <package-or-git-url>')
+      return ['add', spec]
+    }
+    case 'remove':
+    case 'update': {
+      const name = rest[0]
+      if (rest.length !== 1 || name === undefined) throw new Error(`usage: ${verb} <package-name>`)
+      return [verb, name]
+    }
+    case 'install':
+      if (rest.length !== 0) throw new Error('usage: install')
+      return ['install']
+    case 'rollback':
+      if (rest.length !== 0) throw new Error('usage: rollback')
+      return []
+    default:
+      throw new Error(`unknown command "${verb}" — use add / remove / update / install / rollback`)
+  }
 }
 
-/** The market's injected world: profile, engine version, feeds, command runner. */
+/** The marketplace's read and mutating operations. */
+export interface MarketOperations {
+  /** The shipped feed merged with the live profile and engine facts. */
+  list(): Promise<{ readonly engineVersion: string | undefined; readonly plugins: PluginState[] }>
+  /** Run one terminal command; throws on a parse or execution failure. */
+  runCommand(command: string): Promise<string>
+}
+
+/** The market's injected world: profile, engine version, shipped feed file, command runner. */
 export interface MarketContext {
   /** The profile directory the plugin forwarder manages. */
   readonly profileDir: string
   /** The running engine version, or undefined when unknown (compatibility unknown). */
   readonly engineVersion: string | undefined
-  /** The curated feed URL. */
-  readonly feedUrl: string
-  /** The npm registry the market reads README packuments from. */
-  readonly registry: string
-  /** The community plugin index URL; omitted disables community merging. */
-  readonly communityIndexUrl?: string
-  /** Fetcher override shared by the feed, the index, and README fetches (tests). */
-  readonly fetchFeed?: (url: string) => Promise<unknown>
-  /** Optional diagnostic sink for non-fatal community-index failures. */
-  readonly onLog?: (line: string) => void
+  /** The locally shipped feed file path. */
+  readonly feedPath: string
   /** The `dsh plugin` command runner; returns the exit code (injected by the shell). */
   readonly runPlugin: (args: readonly string[]) => Promise<number>
-}
-
-/** Whether an install spec is an npm name rather than a git spec. */
-function isNpmSpec(spec: string): boolean {
-  return !spec.startsWith('git+') && !spec.startsWith('github:') && !spec.startsWith('https://')
-}
-
-/** The README cap, in characters; longer documents truncate with a note. */
-const README_MAX_CHARS = 200_000
-
-/** The raw README URL for a github.com repo URL, or undefined. */
-function githubReadmeUrl(source: string): string | undefined {
-  let parsed: URL
-  try {
-    parsed = new URL(source)
-  } catch {
-    return undefined
-  }
-  if (parsed.hostname !== 'github.com') return undefined
-  const parts = parsed.pathname.split('/').filter(part => part !== '')
-  const [owner, repo] = parts
-  if (owner === undefined || repo === undefined) return undefined
-  return `https://raw.githubusercontent.com/${owner}/${repo}/HEAD/README.md`
-}
-
-/** Fetch README text for one plugin: npm packument first, repo raw file otherwise. */
-async function fetchReadmeText(
-  spec: string,
-  source: string,
-  registry: string,
-  fetchImpl: (url: string) => Promise<unknown>,
-): Promise<string> {
-  if (isNpmSpec(spec)) {
-    const url = `${registry.replace(/\/+$/, '')}/${packageName(spec).replace('/', '%2f')}`
-    const packument = await fetchImpl(url)
-    if (packument === null || typeof packument !== 'object' || Array.isArray(packument)) {
-      throw new Error(`plugin readme fetch failed: no packument at ${url}`)
-    }
-    const readme = (packument as Record<string, unknown>).readme
-    if (typeof readme === 'string' && readme.trim() !== '') {
-      return readme.length > README_MAX_CHARS ? `${readme.slice(0, README_MAX_CHARS)}\n\n… (truncated)` : readme
-    }
-  }
-  const rawUrl = githubReadmeUrl(source)
-  if (rawUrl === undefined) throw new Error('no README available for this plugin source')
-  const fetched = await fetchImpl(rawUrl)
-  if (typeof fetched !== 'string') throw new Error(`plugin readme fetch failed: no README at ${rawUrl}`)
-  return fetched.length > README_MAX_CHARS ? `${fetched.slice(0, README_MAX_CHARS)}\n\n… (truncated)` : fetched
 }
 
 /**
@@ -494,27 +389,19 @@ async function fetchReadmeText(
  * @returns the operations.
  */
 export function createMarket(context: MarketContext): MarketOperations {
-  const fetchImpl = context.fetchFeed ?? fetchWithRetries
   const runChecked = async (args: readonly string[], purpose: string): Promise<void> => {
     const code = await context.runPlugin(args)
     if (code !== 0) throw new Error(`plugin ${purpose} failed with exit code ${code}`)
   }
   return {
     async list() {
-      const feed = await fetchMarketFeed(context.feedUrl, fetchImpl)
-      const entries = [...feed.plugins]
-      if (context.communityIndexUrl !== undefined) {
-        try {
-          const index = parseCommunityIndex(await fetchImpl(context.communityIndexUrl))
-          const known = new Set(feed.plugins.map(entry => entry.package))
-          entries.push(...index.filter(entry => !known.has(entry.package)))
-        } catch (error) {
-          // The curated feed still lists; the community index is an extra.
-          context.onLog?.(`community index fetch failed: ${error instanceof Error ? error.message : String(error)}`)
-        }
+      if (!existsSync(context.feedPath)) {
+        throw new Error(`plugin feed file is missing at ${context.feedPath}`)
       }
+      const raw = await readFile(context.feedPath, 'utf8')
+      const feed = parseMarketFeed(JSON.parse(raw) as unknown)
       const profile = readProfileState(context.profileDir)
-      const plugins = entries.map((entry): PluginState => {
+      const plugins = feed.plugins.map((entry): PluginState => {
         const name = packageName(entry.package)
         return {
           ...entry,
@@ -527,23 +414,25 @@ export function createMarket(context: MarketContext): MarketOperations {
       })
       return { engineVersion: context.engineVersion, plugins }
     },
-    async readme(spec, source) {
-      return await fetchReadmeText(spec, source, context.registry, fetchImpl)
-    },
-    async install(spec) {
-      await snapshotProfile(context.profileDir)
-      await runChecked(['add', spec], 'install')
-    },
-    async uninstall(name) {
-      await snapshotProfile(context.profileDir)
-      await runChecked(['remove', name], 'uninstall')
-    },
-    async update(name) {
-      await snapshotProfile(context.profileDir)
-      await runChecked(['update', name], 'update')
-    },
-    async rollback() {
-      await rollbackProfile(context.profileDir, async args => await context.runPlugin(args))
+    async runCommand(command) {
+      const parsed = parsePluginCommand(command)
+      if (parsed.length === 0) {
+        // rollback: restore the snapshot and reconcile.
+        await rollbackProfile(context.profileDir, async args => await context.runPlugin(args))
+        return 'rollback done'
+      }
+      if (parsed[0] === 'add') {
+        await snapshotProfile(context.profileDir)
+        await runChecked(parsed, 'install')
+        return `installed ${parsed[1] ?? ''}`
+      }
+      if (parsed[0] === 'remove' || parsed[0] === 'update') {
+        await snapshotProfile(context.profileDir)
+        await runChecked(parsed, parsed[0])
+        return `${parsed[0]} ${parsed[1] ?? ''} done`
+      }
+      await runChecked(parsed, 'install')
+      return 'install done'
     },
   }
 }

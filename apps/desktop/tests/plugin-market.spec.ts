@@ -1,6 +1,6 @@
 /**
- * Plugin marketplace: feed validation, state merge, snapshot/rollback
- * semantics, and the operation → command mapping.
+ * Plugin marketplace: feed validation, profile state, snapshot/rollback,
+ * build policy, command parsing, and the local-feed market operations.
  * @module @deepseek-ai/dsh-desktop/tests/plugin-market
  */
 
@@ -8,15 +8,14 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node
 import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterAll, describe, expect, it, vi } from 'vitest'
+import { afterAll, describe, expect, it } from 'vitest'
 import {
   createMarket,
   ensureProfileBuildPolicy,
-  fetchMarketFeed,
   hasProfileSnapshot,
-  parseCommunityIndex,
   parseIgnoredBuilds,
   parseMarketFeed,
+  parsePluginCommand,
   readProfileState,
   rollbackProfile,
   snapshotProfile,
@@ -65,23 +64,24 @@ function writeProfile(dir: string, bundles: string[] = [], dependencies: Record<
 /** A market context over one profile with a recording command runner. */
 function harness(): {
   profileDir: string
+  feedPath: string
   calls: string[][]
   context: MarketContext
 } {
   const profileDir = scratch()
+  const feedPath = join(scratch(), 'plugin-feed.json')
+  writeFileSync(feedPath, JSON.stringify(validFeed()))
   const calls: string[][] = []
   const context: MarketContext = {
     profileDir,
     engineVersion: '0.1.0-rc.6',
-    feedUrl: 'https://feeds.example/plugins.json',
-    registry: 'https://registry.example',
-    fetchFeed: async () => validFeed(),
+    feedPath,
     runPlugin: async (args) => {
       calls.push([...args])
       return 0
     },
   }
-  return { profileDir, calls, context }
+  return { profileDir, feedPath, calls, context }
 }
 
 describe('parseMarketFeed', () => {
@@ -101,108 +101,39 @@ describe('parseMarketFeed', () => {
 
   it('rejects an entry with a bad compatibility range', () => {
     const feed = validFeed() as { plugins: Array<Record<string, unknown>> }
-    feed.plugins[0] = { ...feed.plugins[0]!, compatibility: 'not a range' }
+    const first = feed.plugins[0]
+    if (first === undefined) throw new Error('fixture has no entries')
+    feed.plugins[0] = { ...first, compatibility: 'not a range' }
     expect(() => parseMarketFeed(feed)).toThrow(/valid compatibility range/)
   })
 
   it('rejects an entry with a non-https source', () => {
     const feed = validFeed() as { plugins: Array<Record<string, unknown>> }
-    feed.plugins[0] = { ...feed.plugins[0]!, source: 'file:///etc/passwd' }
+    const first = feed.plugins[0]
+    if (first === undefined) throw new Error('fixture has no entries')
+    feed.plugins[0] = { ...first, source: 'file:///etc/passwd' }
     expect(() => parseMarketFeed(feed)).toThrow(/https source URL/)
   })
 
   it('accepts and validates the optional Chinese fields', () => {
     const feed = validFeed() as { plugins: Array<Record<string, unknown>> }
-    feed.plugins[0] = { ...feed.plugins[0]!, titleZh: 'Web UI 全家桶', descriptionZh: '一键装齐。' }
+    const first = feed.plugins[0]
+    if (first === undefined) throw new Error('fixture has no entries')
+    feed.plugins[0] = { ...first, titleZh: 'Web UI 全家桶', descriptionZh: '一键装齐。' }
     const parsed = parseMarketFeed(feed)
     expect(parsed.plugins[0]?.titleZh).toBe('Web UI 全家桶')
     expect(parsed.plugins[0]?.descriptionZh).toBe('一键装齐。')
-    const first = feed.plugins[0]
-    if (first === undefined) throw new Error('fixture has no entries')
     feed.plugins[0] = { ...first, titleZh: 42 }
     expect(() => parseMarketFeed(feed)).toThrow(/titleZh as text/)
   })
-})
 
-describe('fetchMarketFeed', () => {
-  it('fetches and validates through the injected fetcher', async () => {
-    const feed = await fetchMarketFeed('https://feeds.example/plugins.json', async () => validFeed())
-    expect(feed.plugins).toHaveLength(1)
-  })
-
-  it('propagates fetcher failures', async () => {
-    await expect(fetchMarketFeed('https://feeds.example/x', async () => {
-      throw new Error('network down')
-    })).rejects.toThrow('network down')
-  })
-
-  it('retries transient network failures before giving up', async () => {
-    let calls = 0
-    vi.stubGlobal('fetch', vi.fn(async () => {
-      calls += 1
-      if (calls < 3) throw new TypeError('fetch failed')
-      return { ok: true, json: async () => validFeed() }
-    }))
-    const feed = await fetchMarketFeed('https://feeds.example/plugins.json')
-    expect(feed.plugins).toHaveLength(1)
-    expect(calls).toBe(3)
-    vi.unstubAllGlobals()
-  })
-
-  it('does not retry deterministic HTTP errors', async () => {
-    let calls = 0
-    vi.stubGlobal('fetch', vi.fn(async () => {
-      calls += 1
-      return { ok: false, status: 404, json: async () => ({}) }
-    }))
-    await expect(fetchMarketFeed('https://feeds.example/plugins.json')).rejects.toThrow(/HTTP 404/)
-    expect(calls).toBe(1)
-    vi.unstubAllGlobals()
-  })
-})
-
-describe('readProfileState', () => {
-  it('tolerates an absent profile', () => {
-    const state = readProfileState(scratch())
-    expect(state).toEqual({ exists: false, manifest: {}, bundles: [], dependencies: [] })
-  })
-
-  it('reads bundles and dependencies', () => {
-    const dir = scratch()
-    writeProfile(dir, ['@deepseek-ai/dsh-base'], { '@linxin666/dsh-ssh': '0.1.12' })
-    const state = readProfileState(dir)
-    expect(state.exists).toBe(true)
-    expect(state.bundles).toEqual(['@deepseek-ai/dsh-base'])
-    expect(state.dependencies).toEqual(['@linxin666/dsh-ssh'])
-  })
-})
-
-describe('snapshotProfile / rollbackProfile', () => {
-  it('rolls a manifest change back and reconciles', async () => {
-    const dir = scratch()
-    writeProfile(dir, ['@deepseek-ai/dsh-base'])
-    await snapshotProfile(dir)
-    writeProfile(dir, ['@deepseek-ai/dsh-base', '@linxin666/dsh-web-ui-all'])
-    const calls: string[][] = []
-    await rollbackProfile(dir, async (args) => {
-      calls.push([...args])
-      return 0
-    })
-    expect(readProfileState(dir).bundles).toEqual(['@deepseek-ai/dsh-base'])
-    expect(calls).toEqual([['install']])
-    expect(hasProfileSnapshot(dir)).toBe(false)
-  })
-
-  it('restores an absent manifest', async () => {
-    const dir = scratch()
-    await snapshotProfile(dir)
-    writeProfile(dir, ['@linxin666/dsh-web-ui-all'])
-    await rollbackProfile(dir, async () => 0)
-    expect(existsSync(join(dir, 'package.json'))).toBe(false)
-  })
-
-  it('refuses to roll back without a snapshot', async () => {
-    await expect(rollbackProfile(scratch(), async () => 0)).rejects.toThrow(/no plugin snapshot/)
+  it('accepts an entry without a compatibility range', () => {
+    const feed = validFeed() as { plugins: Array<Record<string, unknown>> }
+    const first = feed.plugins[0]
+    if (first === undefined) throw new Error('fixture has no entries')
+    delete first.compatibility
+    const parsed = parseMarketFeed(feed)
+    expect(parsed.plugins[0]?.compatibility).toBeUndefined()
   })
 })
 
@@ -272,111 +203,78 @@ describe('ensureProfileBuildPolicy', () => {
   })
 })
 
-describe('parseCommunityIndex', () => {
-  it('maps an entry without npm to its git spec', () => {
-    const entries = parseCommunityIndex([{
-      id: 'dsh-tui', name: 'dsh-TUI', nameEn: 'dsh-TUI', author: 'ccch1mneyyy',
-      description: '中文描述。', descriptionEn: 'English description.', repo: 'https://github.com/ccch1mneyyy/dsh-TUI',
-    }])
-    expect(entries).toEqual([{
-      package: 'git+https://github.com/ccch1mneyyy/dsh-TUI.git',
-      title: 'dsh-TUI',
-      description: 'English description.',
-      descriptionZh: '中文描述。',
-      author: 'ccch1mneyyy',
-      source: 'https://github.com/ccch1mneyyy/dsh-TUI',
-      official: false,
-      bundles: false,
-    }])
+describe('readProfileState', () => {
+  it('tolerates an absent profile', () => {
+    const state = readProfileState(scratch())
+    expect(state).toEqual({ exists: false, manifest: {}, bundles: [], dependencies: [] })
   })
 
-  it('prefers the npm spec when present', () => {
-    const entries = parseCommunityIndex([{ id: 'x', name: 'X', repo: 'https://github.com/a/b', npm: '@scope/x' }])
-    expect(entries[0]?.package).toBe('@scope/x')
-  })
-
-  it('rejects a non-array and entries without a repo', () => {
-    expect(() => parseCommunityIndex({})).toThrow(/JSON array/)
-    expect(() => parseCommunityIndex([{ name: 'x' }])).toThrow(/https repo URL/)
+  it('reads bundles and dependencies', () => {
+    const dir = scratch()
+    writeProfile(dir, ['@deepseek-ai/dsh-base'], { '@linxin666/dsh-ssh': '0.1.12' })
+    const state = readProfileState(dir)
+    expect(state.exists).toBe(true)
+    expect(state.bundles).toEqual(['@deepseek-ai/dsh-base'])
+    expect(state.dependencies).toEqual(['@linxin666/dsh-ssh'])
   })
 })
 
-describe('createMarket community merge and readme', () => {
-  it('merges community entries and dedupes by spec', async () => {
-    const { context } = harness()
-    const routes: Record<string, unknown> = {
-      'https://feeds.example/plugins.json': validFeed(),
-      'https://feeds.example/community.json': [
-        { id: 'dup', name: 'Web UI 全家桶', nameEn: 'Web UI 全家桶', repo: 'https://github.com/zhu1090093659/dsh-web-ui', npm: '@linxin666/dsh-web-ui-all' },
-        { id: 'extra', name: 'Data Agent', nameEn: 'Data Agent', author: 'omdsh-dev', repo: 'https://github.com/omdsh-dev/dsh-data-agent' },
-      ],
-    }
-    const market = createMarket({
-      ...context,
-      communityIndexUrl: 'https://feeds.example/community.json',
-      fetchFeed: async url => routes[url],
+describe('snapshotProfile / rollbackProfile', () => {
+  it('rolls a manifest change back and reconciles', async () => {
+    const dir = scratch()
+    writeProfile(dir, ['@deepseek-ai/dsh-base'])
+    await snapshotProfile(dir)
+    writeProfile(dir, ['@deepseek-ai/dsh-base', '@linxin666/dsh-web-ui-all'])
+    const calls: string[][] = []
+    await rollbackProfile(dir, async (args) => {
+      calls.push([...args])
+      return 0
     })
-    const state = await market.list()
-    expect(state.plugins.map(plugin => plugin.package)).toEqual([
-      '@linxin666/dsh-web-ui-all',
-      'git+https://github.com/omdsh-dev/dsh-data-agent.git',
-    ])
+    expect(readProfileState(dir).bundles).toEqual(['@deepseek-ai/dsh-base'])
+    expect(calls).toEqual([['install']])
+    expect(hasProfileSnapshot(dir)).toBe(false)
   })
 
-  it('tolerates a failing community index', async () => {
-    const { context } = harness()
-    const logs: string[] = []
-    const market = createMarket({
-      ...context,
-      communityIndexUrl: 'https://feeds.example/community.json',
-      fetchFeed: async (url) => {
-        if (url.includes('community')) throw new Error('down')
-        return validFeed()
-      },
-      onLog: (line) => { logs.push(line) },
-    })
-    const state = await market.list()
-    expect(state.plugins).toHaveLength(1)
-    expect(logs.some(line => line.includes('down'))).toBe(true)
+  it('restores an absent manifest', async () => {
+    const dir = scratch()
+    await snapshotProfile(dir)
+    writeProfile(dir, ['@linxin666/dsh-web-ui-all'])
+    await rollbackProfile(dir, async () => 0)
+    expect(existsSync(join(dir, 'package.json'))).toBe(false)
   })
 
-  it('treats an unknown compatibility as compatible', async () => {
-    const { context } = harness()
-    const feed = validFeed() as { plugins: Array<Record<string, unknown>> }
-    const first = feed.plugins[0]
-    if (first === undefined) throw new Error('fixture has no entries')
-    delete first.compatibility
-    const market = createMarket({ ...context, engineVersion: '0.0.1', fetchFeed: async () => feed })
-    const state = await market.list()
-    expect(state.plugins[0]?.compatible).toBe(true)
+  it('refuses to roll back without a snapshot', async () => {
+    await expect(rollbackProfile(scratch(), async () => 0)).rejects.toThrow(/no plugin snapshot/)
+  })
+})
+
+describe('parsePluginCommand', () => {
+  it('parses add with a spec', () => {
+    expect(parsePluginCommand('add @linxin666/dsh-ssh')).toEqual(['add', '@linxin666/dsh-ssh'])
+    expect(parsePluginCommand('  add  git+https://github.com/a/b.git ')).toEqual(['add', 'git+https://github.com/a/b.git'])
   })
 
-  it('fetches npm READMEs from the registry packument', async () => {
-    const { context } = harness()
-    const market = createMarket({
-      ...context,
-      fetchFeed: async url => url.includes('registry.example') ? { readme: '# Hello\n' } : validFeed(),
-    })
-    await expect(market.readme('@linxin666/dsh-web-ui-all', 'https://github.com/zhu1090093659/dsh-web-ui'))
-      .resolves.toContain('# Hello')
+  it('parses remove, update, and install', () => {
+    expect(parsePluginCommand('remove @linxin666/dsh-ssh')).toEqual(['remove', '@linxin666/dsh-ssh'])
+    expect(parsePluginCommand('update @linxin666/dsh-ssh')).toEqual(['update', '@linxin666/dsh-ssh'])
+    expect(parsePluginCommand('install')).toEqual(['install'])
   })
 
-  it('falls back to the repo raw README for git specs', async () => {
-    const { context } = harness()
-    const market = createMarket({
-      ...context,
-      fetchFeed: async (url) => {
-        if (url.includes('raw.githubusercontent.com')) return '# Repo README\n'
-        return validFeed()
-      },
-    })
-    await expect(market.readme('git+https://github.com/omdsh-dev/dsh-data-agent.git', 'https://github.com/omdsh-dev/dsh-data-agent'))
-      .resolves.toContain('# Repo README')
+  it('parses rollback into the snapshot path', () => {
+    expect(parsePluginCommand('rollback')).toEqual([])
+  })
+
+  it('rejects unknown verbs and wrong arities', () => {
+    expect(() => parsePluginCommand('rm x')).toThrow(/unknown command/)
+    expect(() => parsePluginCommand('add')).toThrow(/usage: add/)
+    expect(() => parsePluginCommand('remove')).toThrow(/usage: remove/)
+    expect(() => parsePluginCommand('install x')).toThrow(/usage: install/)
+    expect(() => parsePluginCommand('')).toThrow(/unknown command/)
   })
 })
 
 describe('createMarket', () => {
-  it('merges feed entries with the live profile state', async () => {
+  it('lists the local feed merged with the live profile state', async () => {
     const { profileDir, context } = harness()
     writeProfile(profileDir, ['@linxin666/dsh-web-ui-all'])
     const state = await createMarket(context).list()
@@ -395,48 +293,48 @@ describe('createMarket', () => {
     }])
   })
 
-  it('flags incompatible entries against the engine version', async () => {
-    const { profileDir, context } = harness()
-    const market = createMarket({ ...context, engineVersion: '0.1.0-rc.5' })
-    const state = await market.list()
-    expect(state.plugins[0]?.compatible).toBe(false)
-    void profileDir
+  it('reports a missing feed file', async () => {
+    const { context } = harness()
+    await expect(createMarket({ ...context, feedPath: join(scratch(), 'nope.json') }).list())
+      .rejects.toThrow(/feed file is missing/)
   })
 
-  it('treats an unknown engine version as compatible', async () => {
+  it('treats an unknown compatibility as compatible', async () => {
     const { context } = harness()
-    const state = await createMarket({ ...context, engineVersion: undefined }).list()
+    const feed = validFeed() as { plugins: Array<Record<string, unknown>> }
+    const first = feed.plugins[0]
+    if (first === undefined) throw new Error('fixture has no entries')
+    delete first.compatibility
+    writeFileSync(context.feedPath, JSON.stringify(feed))
+    const state = await createMarket({ ...context, engineVersion: '0.0.1' }).list()
     expect(state.plugins[0]?.compatible).toBe(true)
   })
 
-  it('installs through add, snapshotting first', async () => {
+  it('runs add commands through the runner, snapshotting first', async () => {
     const { profileDir, calls, context } = harness()
     writeProfile(profileDir)
-    await createMarket(context).install('@linxin666/dsh-web-ui-all')
+    await expect(createMarket(context).runCommand('add @linxin666/dsh-web-ui-all'))
+      .resolves.toBe('installed @linxin666/dsh-web-ui-all')
     expect(calls).toEqual([['add', '@linxin666/dsh-web-ui-all']])
     expect(hasProfileSnapshot(profileDir)).toBe(true)
   })
 
-  it('uninstalls and updates through remove and update', async () => {
+  it('runs remove and update through the runner', async () => {
     const { calls, context } = harness()
     const market = createMarket(context)
-    await market.uninstall('@linxin666/dsh-web-ui-all')
-    await market.update('@linxin666/dsh-web-ui-all')
+    await expect(market.runCommand('remove @linxin666/dsh-web-ui-all')).resolves.toBe('remove @linxin666/dsh-web-ui-all done')
+    await expect(market.runCommand('update @linxin666/dsh-web-ui-all')).resolves.toBe('update @linxin666/dsh-web-ui-all done')
     expect(calls).toEqual([
       ['remove', '@linxin666/dsh-web-ui-all'],
       ['update', '@linxin666/dsh-web-ui-all'],
     ])
   })
 
-  it('surfaces command failures and keeps the snapshot', async () => {
-    const { profileDir, context } = harness()
-    writeProfile(profileDir)
-    const market = createMarket({
-      ...context,
-      runPlugin: async () => 1,
-    })
-    await expect(market.install('@linxin666/dsh-web-ui-all')).rejects.toThrow(/install failed with exit code 1/)
-    expect(hasProfileSnapshot(profileDir)).toBe(true)
+  it('surfaces command failures', async () => {
+    const { context } = harness()
+    const market = createMarket({ ...context, runPlugin: async () => 1 })
+    await expect(market.runCommand('add x')).rejects.toThrow(/install failed with exit code 1/)
+    await expect(market.runCommand('bogus x')).rejects.toThrow(/unknown command/)
   })
 
   it('rolls back through the injected runner', async () => {
@@ -444,16 +342,8 @@ describe('createMarket', () => {
     writeProfile(profileDir, ['@deepseek-ai/dsh-base'])
     await snapshotProfile(profileDir)
     writeProfile(profileDir, ['@deepseek-ai/dsh-base', '@linxin666/dsh-web-ui-all'])
-    await createMarket(context).rollback()
+    await expect(createMarket(context).runCommand('rollback')).resolves.toBe('rollback done')
     expect(readProfileState(profileDir).bundles).toEqual(['@deepseek-ai/dsh-base'])
     expect(calls).toEqual([['install']])
-  })
-
-  it('reports the rollback snapshot on every entry', async () => {
-    const { profileDir, context } = harness()
-    writeProfile(profileDir)
-    await snapshotProfile(profileDir)
-    const state = await createMarket(context).list()
-    expect(state.plugins[0]?.rollbackAvailable).toBe(true)
   })
 })

@@ -41,6 +41,7 @@ import {
 } from './plugin-market.ts'
 import { readShellSettings, writeShellSettings, type ShellSettings } from './shell-settings.ts'
 import { SHELL_LOCALES, shellT, type ShellMessageKey, type ShellLocale } from './shell-i18n.ts'
+import { overlayScriptFromSource } from './settings-overlay.ts'
 import { wireUpdater } from './shell-updater.ts'
 
 // electron-updater is CommonJS; its module.exports is the default export.
@@ -258,6 +259,7 @@ function createWindow(): BrowserWindow {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
+      preload: join(app.getAppPath(), 'market', 'main-preload.cjs'),
     },
   })
   main.webContents.setWindowOpenHandler(({ url: target }) => {
@@ -273,6 +275,21 @@ function createWindow(): BrowserWindow {
   main.webContents.on('did-fail-load', (_event, code, description, validatedUrl) => {
     // The engine died or moved; keep the shell alive and say so in the log.
     logLine(`window load failed (${code} ${description}) for ${validatedUrl}`)
+  })
+  main.webContents.on('did-finish-load', () => {
+    // Inject the settings overlay into the engine page only — never into the
+    // preparing page or any other document.
+    if (!main.webContents.getURL().startsWith('http://127.0.0.1')) return
+    let source: string
+    try {
+      source = readFileSync(join(app.getAppPath(), 'market', 'settings-overlay.js'), 'utf8')
+    } catch {
+      logLine('settings overlay asset missing; running without the in-app settings panel')
+      return
+    }
+    void main.webContents.executeJavaScript(overlayScriptFromSource(source)).catch((error: unknown) => {
+      logLine(`settings overlay injection failed: ${describeError(error)}`)
+    })
   })
   main.on('close', (event) => {
     if (quitting || settings === undefined || !settings.minimizeToTray) return
@@ -403,8 +420,14 @@ async function ensureMarket(): Promise<MarketOperations> {
   if (!existsSync(engineBin)) throw new Error(`engine ${pointer} is not installed`)
   const pnpmBinDir = await ensurePnpmSidecar(paths, current.registry, { onLine: logLine })
   const profileDir = resolveProfileDir('web')
+  const emitMarketLine = (line: string): void => {
+    if (marketWindow !== undefined && !marketWindow.isDestroyed()) {
+      marketWindow.webContents.send('market:command-output', line)
+    }
+  }
   const runPlugin = async (args: readonly string[]): Promise<number> => {
     logLine(`dsh plugin --profile web ${args.join(' ')}`)
+    emitMarketLine(`$ dsh plugin --profile web ${args.join(' ')}`)
     const env = {
       ...process.env,
       PATH: `${pnpmBinDir}${delimiter}${paths.nodeDir}${delimiter}${process.env.PATH ?? ''}`,
@@ -417,16 +440,18 @@ async function ensureMarket(): Promise<MarketOperations> {
         onLine: (line) => {
           lines.push(line)
           logLine(line)
+          emitMarketLine(line)
         },
       })
     const code = await run(args)
     // pnpm ≥10 blocks unreviewed build scripts; the marketplace carries the
-    // reviewed policy (cloudflared allowed, ssh2/cpu-features denied), so the
-    // retry runs the same arguments with the policy in place.
+    // reviewed policy (cloudflared allowed, ssh2/cpu-features denied, the
+    // user-consented rest allowed), so the retry runs the same arguments.
     const blocked = parseIgnoredBuilds(lines)
     if (code !== 0 && blocked.length > 0) {
       if (await ensureProfileBuildPolicy(profileDir)) {
         logLine('wrote the reviewed build-script policy into the profile workspace')
+        emitMarketLine('• build-script policy written; retrying')
       }
       logLine(`retrying install with the reviewed build policy (pnpm blocked: ${blocked.join(', ')})`)
       return await run(args)
@@ -436,10 +461,7 @@ async function ensureMarket(): Promise<MarketOperations> {
   marketOperations = createMarket({
     profileDir,
     engineVersion: enginePackageVersion(versionDir),
-    feedUrl: current.pluginFeedUrl,
-    registry: current.registry,
-    communityIndexUrl: current.communityIndexUrl,
-    onLog: logLine,
+    feedPath: join(app.getAppPath(), 'plugin-feed.json'),
     runPlugin,
   })
   return marketOperations
@@ -453,10 +475,10 @@ function openMarketWindow(): void {
     return
   }
   marketWindow = new BrowserWindow({
-    width: 920,
-    height: 680,
-    minWidth: 680,
-    minHeight: 480,
+    width: 1080,
+    height: 760,
+    minWidth: 760,
+    minHeight: 560,
     title: 'Plugin Marketplace — DeepSeek Harness',
     autoHideMenuBar: true,
     backgroundColor: '#16181d',
@@ -465,16 +487,9 @@ function openMarketWindow(): void {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
+      webviewTag: true,
       preload: join(app.getAppPath(), 'market', 'preload.cjs'),
     },
-  })
-  marketWindow.webContents.setWindowOpenHandler(({ url }) => {
-    if (/^https:\/\//.test(url)) {
-      void shell.openExternal(url).catch((error: unknown) => {
-        logLine(`opening external URL failed: ${describeError(error)}`)
-      })
-    }
-    return { action: 'deny' }
   })
   marketWindow.on('closed', () => { marketWindow = undefined })
   void marketWindow.loadFile(join(app.getAppPath(), 'market', 'index.html')).catch((error: unknown) => {
@@ -482,16 +497,39 @@ function openMarketWindow(): void {
   })
 }
 
+// The shell overlay IPC surface for the main window's bottom-left settings.
+ipcMain.handle('shell:state', () => ({
+  locale,
+  openAtLogin: settings?.openAtLogin ?? false,
+  engineRunning: engine !== undefined,
+  port: engine?.port ?? 0,
+}))
+ipcMain.handle('shell:set-locale', async (_event, next: unknown) => {
+  if (next !== 'zh' && next !== 'en') throw new Error('locale must be zh or en')
+  if (settings === undefined) throw new Error('settings are not loaded yet')
+  await saveSettings({ ...settings, locale: next })
+  return locale
+})
+ipcMain.handle('shell:set-login-item', async (_event, value: unknown) => {
+  if (typeof value !== 'boolean') throw new Error('openAtLogin must be a boolean')
+  if (settings === undefined) throw new Error('settings are not loaded yet')
+  await saveSettings({ ...settings, openAtLogin: value })
+  return value
+})
+ipcMain.handle('shell:restart-engine', () => { void restartEngine() })
+ipcMain.handle('shell:check-shell-updates', () => { void wiredUpdater?.check() })
+ipcMain.handle('shell:check-engine-updates', () => { void checkEngineUpdates() })
+ipcMain.handle('shell:open-market', () => { openMarketWindow() })
+ipcMain.handle('shell:quit', () => {
+  quitting = true
+  app.quit()
+})
+
 // The marketplace IPC surface: every handler validates its argument at the
 // wire boundary and surfaces failures to the page through the invoke rejection.
-ipcMain.handle('market:list', async (): Promise<{ readonly locale: ShellLocale; readonly engineVersion: string | undefined; readonly plugins: PluginState[] }> => {
+ipcMain.handle('market:init', async (): Promise<{ readonly locale: ShellLocale; readonly communityPageUrl: string; readonly engineVersion: string | undefined; readonly plugins: PluginState[] }> => {
   const listing = await (await ensureMarket()).list()
-  return { locale, ...listing }
-})
-ipcMain.handle('market:readme', async (_event, spec: unknown, source: unknown) => {
-  if (typeof spec !== 'string' || spec.trim() === '') throw new Error('readme needs a package spec')
-  if (typeof source !== 'string' || !source.startsWith('https://')) throw new Error('readme needs an https source URL')
-  return await (await ensureMarket()).readme(spec, source)
+  return { locale, communityPageUrl: settings?.communityPageUrl ?? 'https://github.com/zhu1090093659/dsh-web-ui', ...listing }
 })
 ipcMain.handle('market:set-locale', async (_event, next: unknown) => {
   if (next !== 'zh' && next !== 'en') throw new Error('locale must be zh or en')
@@ -499,25 +537,15 @@ ipcMain.handle('market:set-locale', async (_event, next: unknown) => {
   await saveSettings({ ...settings, locale: next })
   return locale
 })
-ipcMain.handle('market:install', async (_event, spec: unknown) => {
-  if (typeof spec !== 'string' || spec.trim() === '') throw new Error('install needs a package spec')
-  await (await ensureMarket()).install(spec)
+ipcMain.handle('market:run-command', async (_event, command: unknown) => {
+  if (typeof command !== 'string' || command.trim() === '') throw new Error('command must be a non-empty string')
+  return await (await ensureMarket()).runCommand(command)
 })
-ipcMain.handle('market:uninstall', async (_event, name: unknown) => {
-  if (typeof name !== 'string' || name.trim() === '') throw new Error('uninstall needs a package name')
-  await (await ensureMarket()).uninstall(name)
-})
-ipcMain.handle('market:update', async (_event, name: unknown) => {
-  if (typeof name !== 'string' || name.trim() === '') throw new Error('update needs a package name')
-  await (await ensureMarket()).update(name)
-})
-ipcMain.handle('market:rollback', async () => (await ensureMarket()).rollback())
-ipcMain.handle('market:open-external', (_event, url: unknown) => {
-  if (typeof url === 'string' && /^https:\/\//.test(url)) {
-    void shell.openExternal(url).catch((error: unknown) => {
-      logLine(`opening external URL failed: ${describeError(error)}`)
-    })
-  }
+ipcMain.handle('market:restart-app', () => {
+  quitting = true
+  engine?.stop()
+  app.relaunch()
+  app.exit(0)
 })
 
 /** Boot the engine and open the window over its URL. */

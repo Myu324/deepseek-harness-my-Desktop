@@ -4,12 +4,9 @@
 const { contextBridge, ipcRenderer } = require('electron')
 
 contextBridge.exposeInMainWorld('market', {
-  list: () => ipcRenderer.invoke('market:list'),
+  init: () => ipcRenderer.invoke('market:init'),
   setLocale: locale => ipcRenderer.invoke('market:set-locale', locale),
-  readme: (spec, source) => ipcRenderer.invoke('market:readme', spec, source),
-  install: spec => ipcRenderer.invoke('market:install', spec),
-  uninstall: name => ipcRenderer.invoke('market:uninstall', name),
-  update: name => ipcRenderer.invoke('market:update', name),
-  rollback: () => ipcRenderer.invoke('market:rollback'),
-  openExternal: url => ipcRenderer.invoke('market:open-external', url),
+  runCommand: command => ipcRenderer.invoke('market:run-command', command),
+  restartApp: () => ipcRenderer.invoke('market:restart-app'),
+  onCommandOutput: callback => ipcRenderer.on('market:command-output', (_event, line) => callback(line)),
 })

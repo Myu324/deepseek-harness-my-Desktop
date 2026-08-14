@@ -11,26 +11,23 @@
     <h1 id="page-title">插件市场</h1>
     <div class="subtitle">
       <span id="engine-label">引擎</span> <code id="engine-version">…</code> ·
-      <button id="refresh" class="link">刷新</button> ·
       <select id="lang" title="语言 / Language">
         <option value="zh">中文</option>
         <option value="en">English</option>
       </select>
+      <button id="restart-app" class="danger">重启客户端</button>
     </div>
   </header>
-  <div class="toolbar">
-    <input id="search" type="search" placeholder="搜索插件…" />
-  </div>
-  <main id="plugins"></main>
-  <section id="detail" hidden>
-    <button id="back" class="link">← 返回列表</button>
-    <div id="detail-content"></div>
+  <div id="chips"></div>
+  <webview id="community" src="about:blank" partition="persist:community"></webview>
+  <section id="terminal">
+    <div id="terminal-output" aria-live="polite"></div>
+    <form id="terminal-form">
+      <span class="prompt">$</span>
+      <input id="terminal-input" autocomplete="off" spellcheck="false" placeholder="输入插件命令：add @linxin666/dsh-ssh" />
+    </form>
+    <div id="terminal-hint"></div>
   </section>
-  <section id="rollback-section" hidden>
-    <button id="rollback" class="danger">回滚上次更改</button>
-    <span class="hint" id="rollback-hint"></span>
-  </section>
-  <footer id="status"></footer>
   <script src="market.js"></script>
 </body>
 </html>

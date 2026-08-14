@@ -15,7 +15,8 @@
   "productName": "DeepSeek Harness",
   "files": [
     "lib/*.js",
-    "market/**/*"
+    "market/**/*",
+    "plugin-feed.json"
   ],
   "license": "MIT",
   "scripts": {

@@ -23,7 +23,7 @@ node --import tsx/esm apps/desktop/scripts/engine-store-e2e.mjs <storeRoot>
 
 ## 插件市场
 
-托盘的 **Plugin Marketplace** 打开一个壳自有窗口，展示精选 feed（`apps/desktop/plugin-feed.json`，经仓库 raw URL 服务；壳设置的 `pluginFeedUrl` 可指向别处）。每个 feed 条目声明其安装 spec、来源仓库、官方/社区信任级别，以及（已知时的）引擎 semver 兼容范围，可带 `titleZh`/`descriptionZh` 中文字段（中文界面优先显示）；无兼容范围的条目显示「兼容性未知」。页面把 feed 与 web-ui 家族的社区插件索引（`communityIndexUrl`；无 npm 字段的条目以 git spec 从其仓库安装）合并展示，提供搜索框，点击卡片进入详情页渲染插件 README——npm 包读 registry packument，git 安装读仓库 raw README。安装（家族聚合包一键装齐）、更新、卸载与清单快照回滚走真实的 `dsh plugin --profile web` pnpm 前向器：pnpm 由引擎仓库运行时目录预置（`runtime/pnpm`，用自带 npm 安装）并前置进命令 PATH。pnpm 会拦截未经评审的构建脚本；市场把 profile workspace 里 pnpm 写入的 `allowBuilds` 占位条目解析——评审集（`cloudflared: true`、`ssh2`/`cpu-features: false`）之外的条目解析为 true，因为用户已在展示信任信息的界面上批准了安装。新插件只需在 feed 加条目并推送（社区插件由索引自动出现），所有已装客户端即可看到，无需重新打包。真实环境的完整流程可运行：
+托盘的 **Plugin Marketplace** 打开一个壳自有窗口，用 webview 内嵌社区页面（壳设置的 `communityPageUrl`，默认 dsh-web-ui 仓库主页）——不爬取任何 GitHub 接口——并在底部提供终端。在社区页找到合适的插件后，用命令安装：`add <包名或 git 地址>`（另有 `remove <名称>`、`update <名称>`、`install`、`rollback`）。终端逐行流式显示真实 `dsh plugin --profile web` 的输出，安装完成后点 **重启客户端** 按钮重启应用生效。webview 上方是本地随包附带的 `apps/desktop/plugin-feed.json` 精选快捷命令条（点击即填入命令）。安装走 pnpm 前向器：pnpm 由引擎仓库运行时目录预置（`runtime/pnpm`，用自带 npm 安装）；pnpm 的 `allowBuilds` 占位条目解析为评审集（`cloudflared: true`、`ssh2`/`cpu-features: false`）加 true（用户已批准安装）。真实环境的完整流程可运行：
 
 ```sh
 node --import tsx/esm apps/desktop/scripts/plugin-market-e2e.mjs <storeRoot>
@@ -62,4 +62,4 @@ Electron 二进制与 NSIS 工具链默认从 GitHub 下载；设置 `ELECTRON_M
 
 ## 当前范围
 
-单实例壳；引擎 spawn 带自动空闲端口选择与 EADDRINUSE 重试；就绪判定走引擎的 `dsh web:` 公告行，HTTP 探测兜底；沙箱窗口加载引擎 URL；托盘菜单（打开/重启引擎/开机自启/语言/壳更新/引擎更新/插件市场/退出）；关窗驻留托盘使定时任务继续运行；更新事件的系统通知；壳自更新接线（electron-updater，仅打包安装启用）；受管引擎版本仓库（健康检查、原子指针切换、last-good 回退）；基于 `dsh plugin` 前向器的插件市场；壳界面与市场页双语（默认中文，托盘「语言」菜单或页面选择器切换）；electron-builder 打包（按用户 NSIS + 便携 zip）。所有运行时依赖都打进 `lib/main.js`，打包产物不带 node_modules。
+单实例壳；引擎 spawn 带自动空闲端口选择与 EADDRINUSE 重试；就绪判定走引擎的 `dsh web:` 公告行，HTTP 探测兜底；沙箱窗口加载引擎 URL，并注入左下角设置浮层（引擎状态/重启、开机自启、语言、壳/引擎更新检查、插件市场、退出），与托盘功能镜像；关窗驻留托盘使定时任务继续运行；更新事件的系统通知；壳自更新接线（electron-updater，仅打包安装启用）；受管引擎版本仓库（健康检查、原子指针切换、last-good 回退）；插件市场（内嵌社区 webview + 终端安装 + 客户端重启）；壳界面双语（默认中文，托盘「语言」菜单、浮层或市场选择器切换）；electron-builder 打包（按用户 NSIS + 便携 zip）。所有运行时依赖都打进 `lib/main.js`，打包产物不带 node_modules。

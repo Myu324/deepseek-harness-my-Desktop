@@ -63,8 +63,7 @@ describe('readShellSettings', () => {
       updateChannel: 'beta',
       registry: 'https://registry.npmmirror.com',
       nodeMirror: DEFAULT_SHELL_SETTINGS.nodeMirror,
-      pluginFeedUrl: DEFAULT_SHELL_SETTINGS.pluginFeedUrl,
-      communityIndexUrl: DEFAULT_SHELL_SETTINGS.communityIndexUrl,
+      communityPageUrl: DEFAULT_SHELL_SETTINGS.communityPageUrl,
       locale: 'en',
     })
   })
@@ -77,8 +76,7 @@ describe('readShellSettings', () => {
       updateChannel: 'beta' as const,
       registry: 'https://registry.npmmirror.com',
       nodeMirror: 'https://npmmirror.com/mirrors/node',
-      pluginFeedUrl: 'https://raw.githubusercontent.com/example/feed.json',
-      communityIndexUrl: 'https://raw.githubusercontent.com/example/community.json',
+      communityPageUrl: 'https://github.com/zhu1090093659/dsh-web-ui',
       locale: 'zh' as const,
     }
     await writeShellSettings(path, settings)
